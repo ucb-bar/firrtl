@@ -37,7 +37,7 @@ class RemoveWiresSpec extends FirrtlFlatSpec {
     circuit.modules.head match {
       case Module(_,_,_, body) => onStmt(body)
     }
-    (nodes, wires)
+    (nodes.toSeq, wires.toSeq)
   }
 
   def orderedNames(circuit: Circuit): Seq[String] = {
@@ -55,7 +55,7 @@ class RemoveWiresSpec extends FirrtlFlatSpec {
     circuit.modules.head match {
       case Module(_,_,_, body) => onStmt(body)
     }
-    names
+    names.toSeq
   }
 
   "Remove Wires" should "turn wires and their single connect into nodes" in {
@@ -163,7 +163,7 @@ class RemoveWiresSpec extends FirrtlFlatSpec {
       |c <= n""".stripMargin
     )
     // Check declaration before use is maintained
-    passes.CheckHighForm.execute(result)
+    firrtl.passes.CheckHighForm.execute(result)
   }
 
   it should "order registers with async reset correctly" in {
@@ -180,7 +180,7 @@ class RemoveWiresSpec extends FirrtlFlatSpec {
       |""".stripMargin
     )
     // Check declaration before use is maintained
-    passes.CheckHighForm.execute(result)
+    firrtl.passes.CheckHighForm.execute(result)
   }
 
   it should "order registers respecting initializations" in {
@@ -195,7 +195,7 @@ class RemoveWiresSpec extends FirrtlFlatSpec {
           |bar <= y
           |""".stripMargin)
     // Check declaration before use is maintained
-    passes.CheckHighForm.execute(result)
+    firrtl.passes.CheckHighForm.execute(result)
   }
 
 }

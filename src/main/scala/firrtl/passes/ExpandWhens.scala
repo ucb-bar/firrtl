@@ -31,8 +31,7 @@ object ExpandWhens extends Pass {
     Seq( Dependency(PullMuxes),
          Dependency(ReplaceAccesses),
          Dependency(ExpandConnects),
-         Dependency(RemoveAccesses),
-         Dependency(Uniquify) ) ++ firrtl.stage.Forms.Resolved
+         Dependency(RemoveAccesses) ) ++ firrtl.stage.Forms.Resolved
 
   override def invalidates(a: Transform): Boolean = a match {
     case CheckInitialization | ResolveKinds | InferTypes => true
@@ -133,7 +132,9 @@ object ExpandWhens extends Pass {
       case sx: Stop =>
         simlist += (if (weq(p, one)) sx else Stop(sx.info, sx.ret, sx.clk, AND(p, sx.en)))
         EmptyStmt
-      case sx: Verification => if (weq(p, one)) sx else sx.copy(en = AND(p, sx.en))
+      case sx: Verification =>
+        simlist += (if (weq(p, one)) sx else sx.copy(en = AND(p, sx.en)))
+        EmptyStmt
       // Expand conditionally, see comments below
       case sx: Conditionally =>
         /* 1) Recurse into conseq and alt with empty netlist, updated defaults, updated predicate
@@ -210,7 +211,7 @@ object ExpandWhens extends Pass {
 
     val attachedAnalogs = attaches.flatMap(_.exprs.map(we)).toSet
     val newBody = Block(Seq(squashEmpty(bodyx)) ++ expandNetlist(netlist, attachedAnalogs) ++
-                            combineAttaches(attaches) ++ simlist)
+                            combineAttaches(attaches.toSeq) ++ simlist)
     Module(m.info, m.name, m.ports, newBody)
   }
 
@@ -292,8 +293,7 @@ class ExpandWhensAndCheck extends Transform with DependencyAPIMigration {
     Seq( Dependency(PullMuxes),
          Dependency(ReplaceAccesses),
          Dependency(ExpandConnects),
-         Dependency(RemoveAccesses),
-         Dependency(Uniquify) ) ++ firrtl.stage.Forms.Deduped
+         Dependency(RemoveAccesses) ) ++ firrtl.stage.Forms.Deduped
 
   override def invalidates(a: Transform): Boolean = a match {
     case ResolveKinds | InferTypes | ResolveFlows | _: InferWidths => true

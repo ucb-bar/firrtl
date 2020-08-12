@@ -157,7 +157,7 @@ class DedupModules extends Transform with DependencyAPIMigration {
     moduleRenameMap.recordAll(map)
 
     // Build instanceify renaming map
-    val instanceGraph = new InstanceKeyGraph(c)
+    val instanceGraph = InstanceKeyGraph(c)
     val instanceify = RenameMap()
     val moduleName2Index = c.modules.map(_.name).zipWithIndex.map { case (n, i) =>
       {
@@ -467,7 +467,7 @@ object DedupModules extends LazyLogging {
                   renameMap: RenameMap): Map[String, DefModule] = {
 
     val (moduleMap, moduleLinearization) = {
-      val iGraph = new InstanceKeyGraph(circuit)
+      val iGraph = InstanceKeyGraph(circuit)
       (iGraph.moduleMap, iGraph.moduleOrder.reverse)
     }
     val main = circuit.main
@@ -550,7 +550,7 @@ object DedupModules extends LazyLogging {
     }
 
     changeInternals(rename, retype, {i => i}, {(x, y) => x}, renameExps = false)(m)
-    refs
+    refs.toIndexedSeq
   }
 
   def computeRenameMap(originalNames: IndexedSeq[ReferenceTarget],
@@ -578,6 +578,6 @@ object DedupModules extends LazyLogging {
     }
 
     onExp(root)
-    all
+    all.toSeq
   }
 }

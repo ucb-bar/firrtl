@@ -12,6 +12,25 @@ import firrtl.options.Dependency
 trait CheckHighFormLike { this: Pass =>
   type NameSet = collection.mutable.HashSet[String]
 
+  private object ScopeView {
+    def apply(): ScopeView = new ScopeView(new NameSet, List(new NameSet))
+  }
+
+  private class ScopeView private (moduleNS: NameSet, scopes: List[NameSet]) {
+    require(scopes.nonEmpty)
+    def declare(name: String): Unit = {
+      moduleNS += name
+      scopes.head += name
+    }
+    def expandMPortVisibility(port: CDefMPort): Unit = {
+      // Legacy CHIRRTL ports are visible in any scope where their parent memory is visible
+      scopes.find(_.contains(port.mem)).getOrElse(scopes.head) += port.name
+    }
+    def legalDecl(name: String): Boolean = !moduleNS.contains(name)
+    def legalRef(name: String): Boolean = scopes.exists(_.contains(name))
+    def childScope(): ScopeView = new ScopeView(moduleNS, new NameSet +: scopes)
+  }
+
   // Custom Exceptions
   class NotUniqueException(info: Info, mname: String, name: String) extends PassException(
     s"$info: [module $mname] Reference $name does not have a unique name.")
@@ -35,6 +54,8 @@ trait CheckHighFormLike { this: Pass =>
     s"$info: Repeat definition of module $mname")
   class DefnameConflictException(info: Info, mname: String, defname: String) extends PassException(
     s"$info: defname $defname of extmodule $mname conflicts with an existing module")
+  class DefnameDifferentPortsException(info: Info, mname: String, defname: String) extends PassException(
+    s"""$info: ports of extmodule $mname with defname $defname are different for an extmodule with the same defname""")
   class ModuleNotDefinedException(info: Info, mname: String, name: String) extends PassException(
     s"$info: Module $name is not defined.")
   class IncorrectNumArgsException(info: Info, mname: String, op: String, n: Int) extends PassException(
@@ -77,13 +98,41 @@ trait CheckHighFormLike { this: Pass =>
 
     val intModuleNames = c.modules.view.collect({ case m: Module => m.name }).toSet
 
-    c.modules.view.groupBy(_.name).filter(_._2.length > 1).flatMap(_._2).foreach {
+    c.modules.groupBy(_.name).filter(_._2.length > 1).flatMap(_._2).foreach {
       m => errors.append(new ModuleNameNotUniqueException(m.info, m.name))
     }
 
+    /** Strip all widths from types */
+    def stripWidth(tpe: Type): Type = tpe match {
+      case a: GroundType    => a.mapWidth(_ => UnknownWidth)
+      case a: AggregateType => a.mapType(stripWidth)
+    }
+
+    val extmoduleCollidingPorts = c.modules.collect {
+      case a: ExtModule => a
+    }.groupBy(a => (a.defname, a.params.nonEmpty)).map {
+      /* There are no parameters, so all ports must match exactly. */
+      case (k@ (_, false), a) =>
+        k -> a.map(_.copy(info=NoInfo)).map(_.ports.map(_.copy(info=NoInfo))).toSet
+      /* If there are parameters, then only port names must match because parameters could parameterize widths.
+       * This means that this check cannot produce false positives, but can have false negatives.
+       */
+      case (k@ (_, true),  a) =>
+        k -> a.map(_.copy(info=NoInfo)).map(_.ports.map(_.copy(info=NoInfo).mapType(stripWidth))).toSet
+    }.filter(_._2.size > 1)
+
     c.modules.collect {
-      case ExtModule(info, name, _, defname, _) if (intModuleNames.contains(defname)) =>
-        errors.append(new DefnameConflictException(info, name, defname))
+      case a: ExtModule =>
+        a match {
+          case ExtModule(info, name, _, defname, _) if (intModuleNames.contains(defname)) =>
+            errors.append(new DefnameConflictException(info, name, defname))
+          case _ =>
+        }
+        a match {
+          case ExtModule(info, name, _, defname, params) if extmoduleCollidingPorts.contains((defname, params.nonEmpty)) =>
+            errors.append(new DefnameDifferentPortsException(info, name, defname))
+          case _ =>
+        }
     }
 
     def checkHighFormPrimop(info: Info, mname: String, e: DoPrim): Unit = {
@@ -176,11 +225,11 @@ trait CheckHighFormLike { this: Pass =>
       }
     }
 
-    def checkHighFormE(info: Info, mname: String, names: NameSet)(e: Expression): Unit = {
+    def checkHighFormE(info: Info, mname: String, names: ScopeView)(e: Expression): Unit = {
       e match {
-        case ex: Reference if !names(ex.name) =>
+        case ex: Reference if !names.legalRef(ex.name) =>
           errors.append(new UndeclaredReferenceException(info, mname, ex.name))
-        case ex: WRef if !names(ex.name) =>
+        case ex: WRef if !names.legalRef(ex.name) =>
           errors.append(new UndeclaredReferenceException(info, mname, ex.name))
         case ex: UIntLiteral if ex.value < 0 =>
           errors.append(new NegUIntException(info, mname))
@@ -194,10 +243,10 @@ trait CheckHighFormLike { this: Pass =>
       e foreach checkHighFormE(info, mname, names)
     }
 
-    def checkName(info: Info, mname: String, names: NameSet)(name: String): Unit = {
-      if (names(name))
+    def checkName(info: Info, mname: String, names: ScopeView)(name: String): Unit = {
+      if (!names.legalDecl(name))
         errors.append(new NotUniqueException(info, mname, name))
-      names += name
+      names.declare(name)
     }
 
     def checkInstance(info: Info, child: String, parent: String): Unit = {
@@ -209,7 +258,7 @@ trait CheckHighFormLike { this: Pass =>
         errors.append(new InstanceLoop(info, parent, childToParent mkString "->"))
     }
 
-    def checkHighFormS(minfo: Info, mname: String, names: NameSet)(s: Statement): Unit = {
+    def checkHighFormS(minfo: Info, mname: String, names: ScopeView)(s: Statement): Unit = {
       val info = get_info(s) match {case NoInfo => minfo case x => x}
       s foreach checkName(info, mname, names)
       s match {
@@ -228,18 +277,26 @@ trait CheckHighFormLike { this: Pass =>
         case sx: Connect => checkValidLoc(info, mname, sx.loc)
         case sx: PartialConnect => checkValidLoc(info, mname, sx.loc)
         case sx: Print => checkFstring(info, mname, sx.string, sx.args.length)
-        case _: CDefMemory | _: CDefMPort => errorOnChirrtl(info, mname, s).foreach { e => errors.append(e) }
+        case _: CDefMemory => errorOnChirrtl(info, mname, s).foreach { e => errors.append(e) }
+        case mport: CDefMPort =>
+          errorOnChirrtl(info, mname, s).foreach { e => errors.append(e) }
+          names.expandMPortVisibility(mport)
         case sx => // Do Nothing
       }
       s foreach checkHighFormT(info, mname)
       s foreach checkHighFormE(info, mname, names)
-      s foreach checkHighFormS(minfo, mname, names)
+      s match {
+        case Conditionally(_,_, conseq, alt) =>
+          checkHighFormS(minfo, mname, names.childScope())(conseq)
+          checkHighFormS(minfo, mname, names.childScope())(alt)
+        case _ => s foreach checkHighFormS(minfo, mname, names)
+      }
     }
 
-    def checkHighFormP(mname: String, names: NameSet)(p: Port): Unit = {
-      if (names(p.name))
+    def checkHighFormP(mname: String, names: ScopeView)(p: Port): Unit = {
+      if (!names.legalDecl(p.name))
         errors.append(new NotUniqueException(NoInfo, mname, p.name))
-      names += p.name
+      names.declare(p.name)
       checkHighFormT(p.info, mname)(p.tpe)
     }
 
@@ -255,7 +312,7 @@ trait CheckHighFormLike { this: Pass =>
     }
 
     def checkHighFormM(m: DefModule): Unit = {
-      val names = new NameSet
+      val names = ScopeView()
       m foreach checkHighFormP(m.name, names)
       m foreach checkHighFormS(m.info, m.name, names)
       m match {
@@ -287,7 +344,6 @@ object CheckHighForm extends Pass with CheckHighFormLike {
   override def optionalPrerequisiteOf =
     Seq( Dependency(passes.ResolveKinds),
          Dependency(passes.InferTypes),
-         Dependency(passes.Uniquify),
          Dependency(passes.ResolveFlows),
          Dependency[passes.InferWidths],
          Dependency[transforms.InferResets] )

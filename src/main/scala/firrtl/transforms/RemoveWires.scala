@@ -25,6 +25,7 @@ class RemoveWires extends Transform with DependencyAPIMigration {
   override def prerequisites = firrtl.stage.Forms.MidForm ++
     Seq( Dependency(passes.LowerTypes),
          Dependency(passes.Legalize),
+         Dependency(passes.ResolveKinds),
          Dependency(transforms.RemoveReset),
          Dependency[transforms.CheckCombLoops] )
 
@@ -32,7 +33,10 @@ class RemoveWires extends Transform with DependencyAPIMigration {
 
   override def optionalPrerequisiteOf = Seq.empty
 
-  override def invalidates(a: Transform) = false
+  override def invalidates(a: Transform) = a match {
+    case passes.ResolveKinds => true
+    case  _ => false
+  }
 
   // Extract all expressions that are references to a Node, Wire, or Reg
   // Since we are operating on LowForm, they can only be WRefs
@@ -47,7 +51,7 @@ class RemoveWires extends Transform with DependencyAPIMigration {
       e
     }
     rec(expr)
-    refs
+    refs.toSeq
   }
 
   // Transform netlist into DefNodes
@@ -138,7 +142,7 @@ class RemoveWires extends Transform with DependencyAPIMigration {
         onStmt(body)
         getOrderedNodes(netlist, regInfo) match {
           case Success(logic) =>
-            Module(info, name, ports, Block(decls ++ logic ++ otherStmts))
+            Module(info, name, ports, Block(List() ++ decls ++ logic ++ otherStmts))
           // If we hit a CyclicException, just abort removing wires
           case Failure(c: CyclicException) =>
             val problematicNode = c.node
@@ -151,13 +155,7 @@ class RemoveWires extends Transform with DependencyAPIMigration {
     }
   }
 
-  /* @todo move ResolveKinds outside */
-  private val cleanup = Seq(
-    passes.ResolveKinds
-  )
 
-  def execute(state: CircuitState): CircuitState = {
-    val result = state.copy(circuit = state.circuit.map(onModule))
-    cleanup.foldLeft(result) { case (in, xform) => xform.execute(in) }
-  }
+  def execute(state: CircuitState): CircuitState =
+    state.copy(circuit = state.circuit.map(onModule))
 }

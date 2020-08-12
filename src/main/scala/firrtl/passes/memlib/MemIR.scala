@@ -39,7 +39,7 @@ case class DefAnnotatedMemory(
     memRef: Option[(String, String)] /* (Module, Mem) */
     //pins: Seq[Pin],
     ) extends Statement with IsDeclaration {
-  def serialize: String = this.toMem.serialize
+  override def serialize: String = this.toMem.serialize
   def mapStmt(f: Statement => Statement): Statement = this
   def mapExpr(f: Expression => Expression): Statement = this
   def mapType(f: Type => Type): Statement = this.copy(dataType = f(dataType))
@@ -48,8 +48,8 @@ case class DefAnnotatedMemory(
     writeLatency, readLatency, readers, writers,
     readwriters, readUnderWrite)
   def mapInfo(f: Info => Info): Statement = this.copy(info = f(info))
-  def foreachStmt(f: Statement => Unit): Unit = Unit
-  def foreachExpr(f: Expression => Unit): Unit = Unit
+  def foreachStmt(f: Statement => Unit): Unit = ()
+  def foreachExpr(f: Expression => Unit): Unit = ()
   def foreachType(f: Type => Unit): Unit = f(dataType)
   def foreachString(f: String => Unit): Unit = f(name)
   def foreachInfo(f: Info => Unit): Unit = f(info)

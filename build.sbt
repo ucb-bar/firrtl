@@ -2,18 +2,6 @@
 
 enablePlugins(SiteScaladocPlugin)
 
-def scalacOptionsVersion(scalaVersion: String): Seq[String] = {
-  Seq() ++ {
-    // If we're building with Scala > 2.11, enable the compile option
-    //  switch to support our anonymous Bundle definitions:
-    //  https://github.com/scala/bug/issues/10047
-    CrossVersion.partialVersion(scalaVersion) match {
-      case Some((2, scalaMajor: Long)) if scalaMajor < 12 => Seq()
-      case _ => Seq("-Xsource:2.11")
-    }
-  }
-}
-
 def javacOptionsVersion(scalaVersion: String): Seq[String] = {
   Seq() ++ {
     // Scala 2.12 requires Java 8, but we continue to generate
@@ -34,27 +22,33 @@ lazy val commonSettings = Seq(
   name := "firrtl",
   version := "1.4-SNAPSHOT",
   scalaVersion := "2.12.11",
-  crossScalaVersions := Seq("2.12.11", "2.11.12"),
+  crossScalaVersions := Seq("2.13.2", "2.12.11", "2.11.12"),
   addCompilerPlugin(scalafixSemanticdb),
-  scalacOptions := scalacOptionsVersion(scalaVersion.value) ++ Seq(
+  scalacOptions := Seq(
     "-deprecation",
     "-unchecked",
     "-language:reflectiveCalls",
     "-language:existentials",
     "-language:implicitConversions",
     "-Yrangepos",          // required by SemanticDB compiler plugin
-    "-Ywarn-unused-import" // required by `RemoveUnused` rule
   ),
   javacOptions ++= javacOptionsVersion(scalaVersion.value),
   libraryDependencies ++= Seq(
     "org.scala-lang" % "scala-reflect" % scalaVersion.value,
-    "org.scalatest" %% "scalatest" % "3.1.2" % "test",
-    "org.scalatestplus" %% "scalacheck-1-14" % "3.1.1.1" % "test",
+    "org.scalatest" %% "scalatest" % "3.2.1" % "test",
+    "org.scalatestplus" %% "scalacheck-1-14" % "3.1.3.0" % "test",
     "com.github.scopt" %% "scopt" % "3.7.1",
     "net.jcazevedo" %% "moultingyaml" % "0.4.2",
     "org.json4s" %% "json4s-native" % "3.6.8",
     "org.apache.commons" % "commons-text" % "1.8"
   ),
+  // starting with scala 2.13 the parallel collections are separate from the standard library
+  libraryDependencies ++= {
+    CrossVersion.partialVersion(scalaVersion.value) match {
+      case Some((2, major)) if major <= 12 => Seq()
+      case _ => Seq("org.scala-lang.modules" %% "scala-parallel-collections" % "0.2.0")
+    }
+  },
   resolvers ++= Seq(
     Resolver.sonatypeRepo("snapshots"),
     Resolver.sonatypeRepo("releases")
@@ -165,7 +159,7 @@ lazy val docSettings = Seq(
         }
       s"https://github.com/freechipsproject/firrtl/tree/$branch€{FILE_PATH}.scala"
     }
-  ) ++ scalacOptionsVersion(scalaVersion.value) ++ scalacDocOptionsVersion(scalaVersion.value)
+  ) ++ scalacDocOptionsVersion(scalaVersion.value)
 )
 
 lazy val firrtl = (project in file("."))

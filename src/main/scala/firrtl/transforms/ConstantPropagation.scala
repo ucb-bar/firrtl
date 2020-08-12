@@ -11,7 +11,7 @@ import firrtl.Utils._
 import firrtl.Mappers._
 import firrtl.PrimOps._
 import firrtl.graph.DiGraph
-import firrtl.analyses.InstanceGraph
+import firrtl.analyses.InstanceKeyGraph
 import firrtl.annotations.TargetToken.Ref
 import firrtl.options.Dependency
 
@@ -739,8 +739,8 @@ class ConstantPropagation extends Transform with DependencyAPIMigration with Res
 
 
   private def run(c: Circuit, dontTouchMap: Map[OfModule, Set[String]]): Circuit = {
-    val iGraph = new InstanceGraph(c)
-    val moduleDeps = iGraph.getChildrenInstanceMap
+    val iGraph = InstanceKeyGraph(c)
+    val moduleDeps = iGraph.getChildInstanceMap
     val instCount = iGraph.staticInstanceCount
 
     // DiGraph using Module names as nodes, destination of edge is a parent Module
@@ -819,7 +819,7 @@ class ConstantPropagation extends Transform with DependencyAPIMigration with Res
     }
     // Map from module name to component names
     val dontTouchMap: Map[OfModule, Set[String]] =
-      dontTouches.groupBy(_._1).mapValues(_.map(_._2).toSet)
+      dontTouches.groupBy(_._1).mapValues(_.map(_._2).toSet).toMap
 
     state.copy(circuit = run(state.circuit, dontTouchMap))
   }
