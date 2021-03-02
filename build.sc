@@ -57,7 +57,7 @@ class firrtlCrossModule(val crossScalaVersion: String) extends CrossSbtModule wi
 
   object test extends Tests {
     private def ivyCrossDeps = majorVersion match {
-      case i if i < 12 => Agg(ivy"junit:junit:4.13.1")
+      case i if i < 12 => Agg(ivy"junit:junit:4.13.2")
       case _ => Agg()
     }
 
