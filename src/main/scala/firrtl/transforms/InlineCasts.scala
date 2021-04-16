@@ -25,6 +25,7 @@ object InlineCastsTransform {
     * @param expr the Expression being transformed
     * @return Returns expr with [[WRef]]s replaced by values found in replace
     */
+<<<<<<< HEAD
   def onExpr(replace: NodeMap)(expr: Expression): Expression = expr match {
     // Anything that may generate a part-select should not be inlined!
     case DoPrim(op, _, _, _) if (isBitExtract(op) || op == Pad) => expr
@@ -39,6 +40,32 @@ object InlineCastsTransform {
           .getOrElse(e)
       case other => other // Not a candidate
     }
+=======
+  def onExpr(replace: NodeMap)(expr: Expression): Expression = {
+    // Keep track if we've seen any non-cast expressions while recursing
+    def rec(hasNonCastParent: Boolean)(expr: Expression): Expression = expr match {
+      // Skip pads to avoid inlining literals into pads which results in invalid Verilog
+      case DoPrim(op, _, _, _) if (isBitExtract(op) || op == Pad) => expr
+      case e =>
+        e.map(rec(hasNonCastParent || !isCast(e))) match {
+          case e @ WRef(name, _, _, _) =>
+            replace
+              .get(name)
+              .filter(isSimpleCast(castSeen = false))
+              .getOrElse(e)
+          case e @ DoPrim(op, Seq(WRef(name, _, _, _)), _, _) if isCast(op) =>
+            replace
+              .get(name)
+              // Only inline the Expression if there is no non-cast parent in the expression tree OR
+              // if the subtree contains only casts and references.
+              .filter(x => !hasNonCastParent || isSimpleCast(castSeen = true)(x))
+              .map(value => e.copy(args = Seq(value)))
+              .getOrElse(e)
+          case other => other // Not a candidate
+        }
+    }
+    rec(false)(expr)
+>>>>>>> b274b319... Ensure InlineCasts does not inline complex Expressions (#2130)
   }
 
   /** Inline casts in a Statement
