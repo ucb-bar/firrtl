@@ -175,6 +175,33 @@ apiMappings ++= {
       Map.empty[File,URL]
     }
   }
+<<<<<<< HEAD
+=======
+}
+lazy val docSettings = Seq(
+  doc in Compile := (doc in ScalaUnidoc).value,
+  autoAPIMappings := true,
+  scalacOptions in Compile in doc ++= Seq(
+    "-feature",
+    "-diagrams",
+    "-diagrams-max-classes", "25",
+    "-doc-version", version.value,
+    "-doc-title", name.value,
+    "-doc-root-content", baseDirectory.value+"/root-doc.txt",
+    "-sourcepath", (baseDirectory in ThisBuild).value.toString,
+    "-doc-source-url",
+    {
+      val branch =
+        if (version.value.endsWith("-SNAPSHOT")) {
+          "master"
+        } else {
+          s"v${version.value}"
+        }
+      s"https://github.com/chipsalliance/firrtl/tree/$branch€{FILE_PATH_EXT}#L€{FILE_LINE}"
+    }
+  ) ++ scalacDocOptionsVersion(scalaVersion.value)
+)
+>>>>>>> 6e0e7605... Add file line to source link from scaladoc (#2072)
 
 scalacOptions in Compile in doc ++= Seq(
   "-diagrams",
