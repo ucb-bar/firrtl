@@ -707,6 +707,30 @@ class VerilogEmitterSpec extends FirrtlFlatSpec {
     result should    containLine("wire [2:0] _GEN_0 = $signed(x) - 3'sh2;")
     result should    containLine("assign z = _GEN_0[1:0];")
   }
+
+  it should "not pad multiplication" in {
+    val compiler = new VerilogCompiler
+    val result = compileBody(
+      """input x : UInt<2>
+        |input y: UInt<4>
+        |output z : UInt<6>
+        |z <= mul(x, y)
+        |""".stripMargin
+    )
+    result should containLine("assign z = x * y;")
+  }
+
+  it should "not pad division" in {
+    val compiler = new VerilogCompiler
+    val result = compileBody(
+      """input x : UInt<4>
+        |input y: UInt<2>
+        |output z : UInt<4>
+        |z <= div(x, y)
+        |""".stripMargin
+    )
+    result should containLine("assign z = x / y;")
+  }
 }
 
 class VerilogDescriptionEmitterSpec extends FirrtlFlatSpec {
