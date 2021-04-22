@@ -57,6 +57,7 @@ object PadWidths extends Pass {
   private def onExp(e: Expression): Expression = e map onExp match {
     case Mux(cond, tval, fval, tpe) =>
       Mux(cond, fixup(width(tpe))(tval), fixup(width(tpe))(fval), tpe)
+<<<<<<< HEAD
     case ex: ValidIf => ex copy (value = fixup(width(ex.tpe))(ex.value))
     case ex: DoPrim => ex.op match {
       case Lt | Leq | Gt | Geq | Eq | Neq | Not | And | Or | Xor |
@@ -68,6 +69,19 @@ object PadWidths extends Pass {
         ex copy (op = Dshlw, args = Seq(fixup(width(ex.tpe))(ex.args.head), ex.args(1)))
       case _ => ex
     }
+=======
+    case ex: ValidIf => ex.copy(value = fixup(width(ex.tpe))(ex.value))
+    case ex: DoPrim =>
+      ex.op match {
+        case Lt | Leq | Gt | Geq | Eq | Neq | Not | And | Or | Xor | Add | Sub | Rem | Shr =>
+          // sensitive ops
+          ex.map(fixup((ex.args.map(width).foldLeft(0))(math.max)))
+        case Dshl =>
+          // special case as args aren't all same width
+          ex.copy(op = Dshlw, args = Seq(fixup(width(ex.tpe))(ex.args.head), ex.args(1)))
+        case _ => ex
+      }
+>>>>>>> 651fbe93... Stop padding multiply and divide ops (#2058)
     case ex => ex
   }
 

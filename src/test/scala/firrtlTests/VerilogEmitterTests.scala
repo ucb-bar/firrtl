@@ -712,8 +712,95 @@ class VerilogEmitterSpec extends FirrtlFlatSpec {
         |""".stripMargin
     )
     result shouldNot containLine("assign z = $signed(x) + -2'sh2;")
+<<<<<<< HEAD
     result should    containLine("wire [2:0] _GEN_0 = $signed(x) - 3'sh2;")
     result should    containLine("assign z = _GEN_0[1:0];")
+=======
+    result should containLine("wire [2:0] _GEN_0 = $signed(x) - 3'sh2;")
+    result should containLine("assign z = _GEN_0[1:0];")
+  }
+
+  it should "not pad multiplication" in {
+    val compiler = new VerilogCompiler
+    val result = compileBody(
+      """input x : UInt<2>
+        |input y: UInt<4>
+        |output z : UInt<6>
+        |z <= mul(x, y)
+        |""".stripMargin
+    )
+    result should containLine("assign z = x * y;")
+  }
+
+  it should "not pad division" in {
+    val compiler = new VerilogCompiler
+    val result = compileBody(
+      """input x : UInt<4>
+        |input y: UInt<2>
+        |output z : UInt<4>
+        |z <= div(x, y)
+        |""".stripMargin
+    )
+    result should containLine("assign z = x / y;")
+  }
+
+  it should "correctly emit addition with a negative literal with width > 32" in {
+    val result = compileBody(
+      """input x : SInt<34>
+        |output z : SInt<34>
+        |z <= asSInt(tail(add(x, SInt<34>(-2)), 1))
+        |""".stripMargin
+    )
+    result should containLine("assign z = $signed(x) - 34'sh2;")
+  }
+
+  it should "correctly emit conjunction with a negative literal with width > 32" in {
+    val result = compileBody(
+      """input x : SInt<34>
+        |output z : SInt<34>
+        |z <= asSInt(and(x, SInt<34>(-2)))
+        |""".stripMargin
+    )
+    result should containLine("assign z = $signed(x) & -34'sh2;")
+  }
+
+  it should "emit FileInfo as Verilog comment" in {
+    def result(info: String): CircuitState = compileBody(
+      s"""input x : UInt<2>
+         |output z : UInt<2>
+         |z <= x @[$info]
+         |""".stripMargin
+    )
+    result("test") should containLine("  assign z = x; // @[test]")
+    // newlines currently are supposed to be escaped for both firrtl and Verilog
+    // (alternatively one could emit a multi-line comment)
+    result("test\\nx") should containLine("  assign z = x; // @[test\\nx]")
+    // not sure why, but we are also escaping tabs
+    result("test\\tx") should containLine("  assign z = x; // @[test\\tx]")
+    // escaping closing square brackets is only a firrtl issue, should not be reflected in the Verilog emission
+    result("test\\]") should containLine("  assign z = x; // @[test]]")
+    // while firrtl allows for Unicode in the info field they should be escaped for Verilog
+    result("test \uD83D\uDE0E") should containLine("  assign z = x; // @[test \\uD83D\\uDE0E]")
+
+  }
+
+  it should "emit repeated unary operators with parentheses" in {
+    val result1 = compileBody(
+      """input x : UInt<1>
+        |output z : UInt<1>
+        |z <= not(not(x))
+        |""".stripMargin
+    )
+    result1 should containLine("assign z = ~(~x);")
+
+    val result2 = compileBody(
+      """input x : UInt<8>
+        |output z : UInt<1>
+        |z <= not(andr(x))
+        |""".stripMargin
+    )
+    result2 should containLine("assign z = ~(&x);")
+>>>>>>> 651fbe93... Stop padding multiply and divide ops (#2058)
   }
 }
 
