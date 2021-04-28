@@ -50,7 +50,7 @@ lazy val firrtlSettings = Seq(
   libraryDependencies ++= {
     CrossVersion.partialVersion(scalaVersion.value) match {
       case Some((2, major)) if major <= 12 => Seq()
-      case _ => Seq("org.scala-lang.modules" %% "scala-parallel-collections" % "0.2.0")
+      case _ => Seq("org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.2")
     }
   },
   resolvers ++= Seq(
@@ -93,7 +93,7 @@ lazy val antlrSettings = Seq(
   antlr4GenVisitor in Antlr4 := true,
   antlr4GenListener in Antlr4 := false,
   antlr4PackageName in Antlr4 := Option("firrtl.antlr"),
-  antlr4Version in Antlr4 := "4.8",
+  antlr4Version in Antlr4 := "4.9.2",
   javaSource in Antlr4 := (sourceManaged in Compile).value
 )
 
