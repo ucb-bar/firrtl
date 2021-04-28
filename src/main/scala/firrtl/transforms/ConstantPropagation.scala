@@ -13,7 +13,7 @@ import firrtl.PrimOps._
 import firrtl.graph.DiGraph
 import firrtl.analyses.InstanceKeyGraph
 import firrtl.annotations.TargetToken.Ref
-import firrtl.options.Dependency
+import firrtl.options.{Dependency, RegisteredTransform, ShellOption}
 import firrtl.stage.DisableFold
 
 import annotation.tailrec
@@ -29,7 +29,17 @@ object ConstantPropagation {
 
   /** Pads e to the width of t */
   def pad(e: Expression, t: Type) = (bitWidth(e.tpe), bitWidth(t)) match {
-    case (we, wt) if we < wt  => DoPrim(Pad, Seq(e), Seq(wt), t)
+    case (we, wt) if we < wt =>
+      DoPrim(
+        Pad,
+        Seq(e),
+        Seq(wt),
+        e.tpe match {
+          case UIntType(_) => UIntType(IntWidth(wt))
+          case SIntType(_) => SIntType(IntWidth(wt))
+          case _           => e.tpe
+        }
+      )
     case (we, wt) if we == wt => e
   }
 
@@ -101,7 +111,7 @@ object ConstantPropagation {
 
 }
 
-class ConstantPropagation extends Transform with DependencyAPIMigration {
+class ConstantPropagation extends Transform with RegisteredTransform with DependencyAPIMigration {
   import ConstantPropagation._
 
   override def prerequisites =
@@ -123,6 +133,14 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
     case firrtl.passes.Legalize => true
     case _                      => false
   }
+
+  val options = Seq(
+    new ShellOption[Unit](
+      longOption = "no-constant-propagation",
+      toAnnotationSeq = _ => Seq(NoConstantPropagationAnnotation),
+      helpText = "Disable constant propagation elimination"
+    )
+  )
 
   sealed trait SimplifyBinaryOp {
     def matchingArgsValue(e: DoPrim, arg: Expression): Expression
@@ -244,7 +262,7 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
     }
     def simplify(e: Expression, lhs: Literal, rhs: Expression) = lhs match {
       case UIntLiteral(v, _) if v == BigInt(0) => rhs
-      case SIntLiteral(v, _) if v == BigInt(0) => asUInt(rhs, e.tpe)
+      case SIntLiteral(v, _) if v == BigInt(0) => asUInt(pad(rhs, e.tpe), e.tpe)
       case _                                   => e
     }
     def matchingArgsValue(e: DoPrim, arg: Expression) = UIntLiteral(0, getWidth(arg.tpe))
@@ -869,6 +887,11 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
 
     val disabledOps = state.annotations.collect { case DisableFold(op) => op }.toSet
 
-    state.copy(circuit = run(state.circuit, dontTouchMap, disabledOps))
+    if (state.annotations.contains(NoConstantPropagationAnnotation)) {
+      logger.info("Skipping Constant Propagation")
+      state
+    } else {
+      state.copy(circuit = run(state.circuit, dontTouchMap, disabledOps))
+    }
   }
 }

@@ -57,7 +57,6 @@ object Forms {
   val MidForm: Seq[TransformDependency] = HighForm ++
     Seq(
       Dependency(passes.PullMuxes),
-      Dependency[firrtl.transforms.CSESubAccesses],
       Dependency(passes.ReplaceAccesses),
       Dependency(passes.ExpandConnects),
       Dependency(passes.RemoveAccesses),
@@ -102,7 +101,7 @@ object Forms {
       Dependency[firrtl.transforms.FixAddingNegativeLiterals],
       Dependency[firrtl.transforms.ReplaceTruncatingArithmetic],
       Dependency[firrtl.transforms.InlineBitExtractionsTransform],
-      Dependency[firrtl.transforms.InlineCastsTransform],
+      Dependency[firrtl.transforms.InlineAcrossCastsTransform],
       Dependency[firrtl.transforms.LegalizeClocksTransform],
       Dependency[firrtl.transforms.FlattenRegUpdate],
       Dependency(passes.VerilogModulusCleanup),

@@ -10,6 +10,7 @@ import firrtl.options.Dependency
 
 import firrtl.Utils.{isBitExtract, isCast, NodeMap}
 
+@deprecated("Replaced by InlineAcrossCastsTransform", "FIRRTL 1.4.3")
 object InlineCastsTransform {
 
   // Checks if an Expression is made up of only casts terminated by a Literal or Reference
@@ -28,26 +29,33 @@ object InlineCastsTransform {
     * @param expr the Expression being transformed
     * @return Returns expr with [[WRef]]s replaced by values found in replace
     */
-  def onExpr(replace: NodeMap)(expr: Expression): Expression = expr match {
-    // Anything that may generate a part-select should not be inlined!
-    case DoPrim(op, _, _, _) if (isBitExtract(op) || op == Pad) => expr
-    case e =>
-      e.map(onExpr(replace)) match {
-        case e @ WRef(name, _, _, _) =>
-          replace
-            .get(name)
-            .filter(isSimpleCast(castSeen = false))
-            .getOrElse(e)
-        case e @ DoPrim(op, Seq(WRef(name, _, _, _)), _, _) if isCast(op) =>
-          replace
-            .get(name)
-            .map(value => e.copy(args = Seq(value)))
-            .getOrElse(e)
-        case other => other // Not a candidate
-      }
+  def onExpr(replace: NodeMap)(expr: Expression): Expression = {
+    // Keep track if we've seen any non-cast expressions while recursing
+    def rec(hasNonCastParent: Boolean)(expr: Expression): Expression = expr match {
+      // Skip pads to avoid inlining literals into pads which results in invalid Verilog
+      case DoPrim(op, _, _, _) if (isBitExtract(op) || op == Pad) => expr
+      case e =>
+        e.map(rec(hasNonCastParent || !isCast(e))) match {
+          case e @ WRef(name, _, _, _) =>
+            replace
+              .get(name)
+              .filter(isSimpleCast(castSeen = false))
+              .getOrElse(e)
+          case e @ DoPrim(op, Seq(WRef(name, _, _, _)), _, _) if isCast(op) =>
+            replace
+              .get(name)
+              // Only inline the Expression if there is no non-cast parent in the expression tree OR
+              // if the subtree contains only casts and references.
+              .filter(x => !hasNonCastParent || isSimpleCast(castSeen = true)(x))
+              .map(value => e.copy(args = Seq(value)))
+              .getOrElse(e)
+          case other => other // Not a candidate
+        }
+    }
+    rec(false)(expr)
   }
 
-  /** Inline casts in a Statement
+  /** Inline across casts in a statement
     *
     * @param netlist a '''mutable''' HashMap mapping references to [[firrtl.ir.DefNode DefNode]]s to their connected
     * [[firrtl.ir.Expression Expression]]s. This function '''will''' mutate
@@ -64,11 +72,17 @@ object InlineCastsTransform {
       case other => other
     }
 
-  /** Replaces truncating arithmetic in a Module */
+  /** Inline across casts in a module */
   def onMod(mod: DefModule): DefModule = mod.map(onStmt(new NodeMap))
 }
 
-/** Inline nodes that are simple casts */
+/** Inline expressions into casts and inline casts into other expressions
+  *
+  * Because casts are no-ops in the emitted Verilog, this transform eliminates statements that
+  * simply contain a cast. It does so by greedily building larger expression trees that contain at
+  * most one expression that is neither a cast nor reference-like node.
+  */
+@deprecated("Replaced by InlineAcrossCastsTransform", "FIRRTL 1.4.3")
 class InlineCastsTransform extends Transform with DependencyAPIMigration {
 
   override def prerequisites = firrtl.stage.Forms.LowFormMinimumOptimized ++

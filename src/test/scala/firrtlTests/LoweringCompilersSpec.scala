@@ -180,7 +180,6 @@ class LoweringCompilersSpec extends AnyFlatSpec with Matchers {
   it should "replicate the old order" in {
     val tm = new TransformManager(Forms.MidForm, Forms.Deduped)
     val patches = Seq(
-      Add(2, Seq(Dependency[firrtl.transforms.CSESubAccesses])),
       Add(4, Seq(Dependency(firrtl.passes.ResolveFlows))),
       Add(5, Seq(Dependency(firrtl.passes.ResolveKinds))),
       // Uniquify is now part of [[firrtl.passes.LowerTypes]]
@@ -248,7 +247,7 @@ class LoweringCompilersSpec extends AnyFlatSpec with Matchers {
       new firrtl.transforms.ReplaceTruncatingArithmetic,
       new firrtl.transforms.InlineBitExtractionsTransform,
       new firrtl.transforms.PropagatePresetAnnotations,
-      new firrtl.transforms.InlineCastsTransform,
+      new firrtl.transforms.InlineAcrossCastsTransform,
       new firrtl.transforms.LegalizeClocksTransform,
       new firrtl.transforms.FlattenRegUpdate,
       firrtl.passes.VerilogModulusCleanup,
@@ -272,7 +271,7 @@ class LoweringCompilersSpec extends AnyFlatSpec with Matchers {
       new firrtl.transforms.ReplaceTruncatingArithmetic,
       new firrtl.transforms.InlineBitExtractionsTransform,
       new firrtl.transforms.PropagatePresetAnnotations,
-      new firrtl.transforms.InlineCastsTransform,
+      new firrtl.transforms.InlineAcrossCastsTransform,
       new firrtl.transforms.LegalizeClocksTransform,
       new firrtl.transforms.FlattenRegUpdate,
       new firrtl.transforms.DeadCodeElimination,

@@ -3,14 +3,13 @@
 package firrtlTests
 
 import firrtl._
+import firrtl.annotations._
 import firrtl.ir._
 import firrtl.passes._
-import firrtl.transforms._
 import firrtl.passes.memlib._
-import firrtl.FileUtils
+import firrtl.testutils.FirrtlCheckers._
 import firrtl.testutils._
-import annotations._
-import FirrtlCheckers._
+import firrtl.transforms._
 
 class ReplSeqMemSpec extends SimpleTransformSpec {
   def emitter = new LowFirrtlEmitter
@@ -30,9 +29,11 @@ class ReplSeqMemSpec extends SimpleTransformSpec {
     }
   )
 
-  def checkMemConf(filename: String, mems: Set[MemConf]) {
+  def checkMemConf(circuitState: CircuitState, mems: Set[MemConf]) {
     // Read the mem conf
-    val text = FileUtils.getText(filename)
+    val text = circuitState.annotations.collectFirst {
+      case a: MemLibOutConfigFileAnnotation => a.getBytes.map(_.toChar).mkString
+    }.get
     // Verify that this does not throw an exception
     val fromConf = MemConf.fromString(text)
     // Verify the mems in the conf are the same as the expected ones
@@ -74,7 +75,7 @@ circuit Top :
     // Check correctness of firrtl
     parse(res.getEmittedCircuit.value)
     // Check the emitted conf
-    checkMemConf(confLoc, mems)
+    checkMemConf(res, mems)
     (new java.io.File(confLoc)).delete()
   }
 
@@ -99,7 +100,7 @@ circuit Top :
     // Check correctness of firrtl
     parse(res.getEmittedCircuit.value)
     // Check the emitted conf
-    checkMemConf(confLoc, mems)
+    checkMemConf(res, mems)
     (new java.io.File(confLoc)).delete()
   }
 
@@ -127,7 +128,7 @@ circuit CustomMemory :
     // Check correctness of firrtl
     parse(res.getEmittedCircuit.value)
     // Check the emitted conf
-    checkMemConf(confLoc, mems)
+    checkMemConf(res, mems)
     (new java.io.File(confLoc)).delete()
   }
 
@@ -155,7 +156,7 @@ circuit CustomMemory :
     // Check correctness of firrtl
     parse(res.getEmittedCircuit.value)
     // Check the emitted conf
-    checkMemConf(confLoc, mems)
+    checkMemConf(res, mems)
     (new java.io.File(confLoc)).delete()
   }
 
@@ -244,7 +245,7 @@ circuit CustomMemory :
     }
     numExtMods should be(2)
     // Check the emitted conf
-    checkMemConf(confLoc, mems)
+    checkMemConf(res, mems)
     (new java.io.File(confLoc)).delete()
   }
 
@@ -291,7 +292,7 @@ circuit CustomMemory :
     }
     numExtMods should be(2)
     // Check the emitted conf
-    checkMemConf(confLoc, mems)
+    checkMemConf(res, mems)
     (new java.io.File(confLoc)).delete()
   }
 
@@ -353,7 +354,7 @@ circuit CustomMemory :
     //   would be 3 ExtModules
     numExtMods should be(2)
     // Check the emitted conf
-    checkMemConf(confLoc, mems)
+    checkMemConf(res, mems)
     (new java.io.File(confLoc)).delete()
   }
 
@@ -413,7 +414,7 @@ circuit CustomMemory :
     val res = compileAndEmit(CircuitState(parse(input), ChirrtlForm, annos))
     res.getEmittedCircuit.value shouldNot include("mask")
     // Check the emitted conf
-    checkMemConf(confLoc, mems)
+    checkMemConf(res, mems)
     (new java.io.File(confLoc)).delete()
   }
 
@@ -422,7 +423,7 @@ circuit CustomMemory :
 circuit CustomMemory :
   module CustomMemory :
     input clock : Clock
-    output io : { flip en : UInt<1>, out : UInt<8>[2], flip raddr : UInt<10>, flip waddr : UInt<10>, flip wdata : UInt<8>[2], flip mask : UInt<8>[2] }
+    output io : { flip en : UInt<1>, out : UInt<8>[2], flip raddr : UInt<10>, flip waddr : UInt<10>, flip wdata : UInt<8>[2], flip mask : UInt<1>[2] }
 
     smem mem : UInt<8>[2][1024]
     read mport r = mem[io.raddr], clock
@@ -443,7 +444,7 @@ circuit CustomMemory :
     res should containLine("mem.W0_mask_0 <= validif(io_en, io_mask_0)")
     res should containLine("mem.W0_mask_1 <= validif(io_en, io_mask_1)")
     // Check the emitted conf
-    checkMemConf(confLoc, mems)
+    checkMemConf(res, mems)
     (new java.io.File(confLoc)).delete()
   }
 
@@ -452,7 +453,7 @@ circuit CustomMemory :
 circuit CustomMemory :
   module CustomMemory :
     input clock : Clock
-    output io : { flip en : UInt<1>, out : UInt<8>[2], flip raddr : UInt<10>, flip waddr : UInt<10>, flip wdata : UInt<8>[2], flip mask : UInt<8>[2] }
+    output io : { flip en : UInt<1>, out : UInt<8>[2], flip raddr : UInt<10>, flip waddr : UInt<10>, flip wdata : UInt<8>[2], flip mask : UInt<1>[2] }
 
     io.out is invalid
 
@@ -477,7 +478,7 @@ circuit CustomMemory :
     res should containLine("mem.RW0_wmask_0 <= validif(io_en, io_mask_0)")
     res should containLine("mem.RW0_wmask_1 <= validif(io_en, io_mask_1)")
     // Check the emitted conf
-    checkMemConf(confLoc, mems)
+    checkMemConf(res, mems)
     (new java.io.File(confLoc)).delete()
   }
 
@@ -498,7 +499,7 @@ circuit NoMemsHere :
     val annos = Seq(ReplSeqMemAnnotation.parse("-c:CustomMemory:-o:" + confLoc), InferReadWriteAnnotation)
     val res = compileAndEmit(CircuitState(parse(input), ChirrtlForm, annos))
     // Check the emitted conf
-    checkMemConf(confLoc, mems)
+    checkMemConf(res, mems)
     (new java.io.File(confLoc)).delete()
   }
 
