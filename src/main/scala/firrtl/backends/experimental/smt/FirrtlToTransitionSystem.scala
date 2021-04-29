@@ -4,13 +4,17 @@
 package firrtl.backends.experimental.smt
 
 import firrtl.annotations.{MemoryInitAnnotation, NoTargetAnnotation, PresetRegAnnotation}
+import firrtl.bitWidth
 import FirrtlExpressionSemantics.getWidth
+import firrtl.backends.experimental.smt.random._
 import firrtl.graph.MutableDiGraph
 import firrtl.options.Dependency
+import firrtl.passes.MemPortUtils.memPortField
 import firrtl.passes.PassException
+import firrtl.passes.memlib.VerilogMemDelays
 import firrtl.stage.Forms
 import firrtl.stage.TransformManager.TransformDependency
-import firrtl.transforms.PropagatePresetAnnotations
+import firrtl.transforms.{DeadCodeElimination, PropagatePresetAnnotations}
 import firrtl.{
   ir,
   CircuitState,
@@ -40,10 +44,12 @@ private case class TransitionSystem(
   assumes:  Set[String],
   asserts:  Set[String],
   fair:     Set[String],
+  ufs:      List[BVFunctionSymbol] = List(),
   comments: Map[String, String] = Map(),
   header:   Array[String] = Array()) {
   def serialize: String = {
     (Iterator(name) ++
+      ufs.map(u => u.toString) ++
       inputs.map(i => s"input ${i.name} : ${SMTExpr.serializeType(i)}") ++
       signals.map(s => s"${s.name} : ${SMTExpr.serializeType(s.e)} = ${s.e}") ++
       states.map(s => s"state ${s.sym} = [init] ${s.init} [next] ${s.next}")).mkString("\n")
@@ -56,7 +62,8 @@ object FirrtlToTransitionSystem extends Transform with DependencyAPIMigration {
   // TODO: We only really need [[Forms.MidForm]] + LowerTypes, but we also want to fail if there are CombLoops
   // TODO: We also would like to run some optimization passes, but RemoveValidIf won't allow us to model DontCare
   //       precisely and PadWidths emits ill-typed firrtl.
-  override def prerequisites: Seq[Dependency[Transform]] = Forms.LowForm
+  override def prerequisites: Seq[Dependency[Transform]] = Forms.LowForm ++
+    Seq(Dependency(InvalidToRandomPass), Dependency(UndefinedMemoryBehaviorPass), Dependency(VerilogMemDelays))
   override def invalidates(a: Transform): Boolean = false
   // since this pass only runs on the main module, inlining needs to happen before
   override def optionalPrerequisites: Seq[TransformDependency] = Seq(Dependency[firrtl.passes.InlineInstances])
@@ -65,9 +72,12 @@ object FirrtlToTransitionSystem extends Transform with DependencyAPIMigration {
   // Verilog emission passes.
   // Ideally we would go in and enable the [[PropagatePresetAnnotations]] to only depend on LowForm.
   private val presetPass = new PropagatePresetAnnotations
+  // We also need to run the DeadCodeElimination since PropagatePresets does not remove possible remaining
+  // AsyncReset nodes.
+  private val deadCodeElimination = new DeadCodeElimination
   override protected def execute(state: CircuitState): CircuitState = {
     // run the preset pass to extract all preset registers and remove preset reset signals
-    val afterPreset = presetPass.execute(state)
+    val afterPreset = deadCodeElimination.execute(presetPass.execute(state))
     val circuit = afterPreset.circuit
     val presetRegs = afterPreset.annotations.collect {
       case PresetRegAnnotation(target) if target.module == circuit.main => target.ref
@@ -79,15 +89,25 @@ object FirrtlToTransitionSystem extends Transform with DependencyAPIMigration {
       .map(a => a.target.ref -> a.initValue)
       .toMap
 
+    // module look up table
+    val modules = circuit.modules.map(m => m.name -> m).toMap
+
+    // collect uninterpreted module annotations
+    val uninterpreted = afterPreset.annotations.collect {
+      case a: UninterpretedModuleAnnotation =>
+        UninterpretedModuleAnnotation.checkModule(modules(a.target.module), a)
+        a.target.module -> a
+    }.toMap
+
     // convert the main module
-    val main = circuit.modules.find(_.name == circuit.main).get
+    val main = modules(circuit.main)
     val sys = main match {
       case x: ir.ExtModule =>
         throw new ExtModuleException(
           "External modules are not supported by the SMT backend. Use yosys if you need to convert Verilog."
         )
       case m: ir.Module =>
-        new ModuleToTransitionSystem().run(m, presetRegs = presetRegs, memInit = memInit)
+        new ModuleToTransitionSystem().run(m, presetRegs = presetRegs, memInit = memInit, uninterpreted = uninterpreted)
     }
 
     val sortedSys = TopologicalSort.run(sys)
@@ -122,12 +142,13 @@ private class MissingFeatureException(s: String)
 private class ModuleToTransitionSystem extends LazyLogging {
 
   def run(
-    m:          ir.Module,
-    presetRegs: Set[String] = Set(),
-    memInit:    Map[String, MemoryInitValue] = Map()
+    m:             ir.Module,
+    presetRegs:    Set[String] = Set(),
+    memInit:       Map[String, MemoryInitValue] = Map(),
+    uninterpreted: Map[String, UninterpretedModuleAnnotation] = Map()
   ): TransitionSystem = {
     // first pass over the module to convert expressions; discover state and I/O
-    val scan = new ModuleScanner(makeRandom)
+    val scan = new ModuleScanner(uninterpreted)
     m.foreachPort(scan.onPort)
     m.foreachStmt(scan.onStatement)
 
@@ -153,8 +174,7 @@ private class ModuleToTransitionSystem extends LazyLogging {
         onRegister(name, width, resetExpr, initExpr, nextExpr, presetRegs)
     }
     // turn memories into state
-    val memoryEncoding = new MemoryEncoding(makeRandom, scan.namespace)
-    val memoryStatesAndOutputs = scan.memories.map(m => memoryEncoding.onMemory(m, scan.connects, memInit.get(m.name)))
+    val memoryStatesAndOutputs = scan.memories.map(m => onMemory(m, scan.connects, memInit.get(m.name)))
     // replace pseudo assigns for memory outputs
     val memOutputs = memoryStatesAndOutputs.flatMap(_._2).toMap
     val signalsWithMem = signals.map { s =>
@@ -169,7 +189,7 @@ private class ModuleToTransitionSystem extends LazyLogging {
           case _                                       => true
         }
       )
-    val states = regStates.toArray ++ memoryStatesAndOutputs.flatMap(_._1)
+    val states = regStates.toArray ++ memoryStatesAndOutputs.map(_._1)
 
     // generate comments from infos
     val comments = mutable.HashMap[String, String]()
@@ -181,13 +201,17 @@ private class ModuleToTransitionSystem extends LazyLogging {
         }
     }
 
-    // inputs are original module inputs and any "random" signal we need for modelling
-    val inputs = scan.inputs ++ randoms.values
+    // inputs are original module inputs and any DefRandom signal
+    val inputs = scan.inputs
 
     // module info to the comment header
     val header = serializeInfo(m.info).map(InfoPrefix + _).toArray
 
     val fair = Set[String]() // as of firrtl 1.4 we do not support fairness constraints
+
+    // collect unique functions
+    val ufs = scan.functionCalls.groupBy(_.name).map(_._2.head).toList
+
     TransitionSystem(
       m.name,
       inputs.toArray,
@@ -197,6 +221,7 @@ private class ModuleToTransitionSystem extends LazyLogging {
       constraints,
       bad,
       fair,
+      ufs,
       comments.toMap,
       header
     )
@@ -226,6 +251,96 @@ private class ModuleToTransitionSystem extends LazyLogging {
     }
   }
 
+  type Connects = Iterable[(String, BVExpr)]
+  private def onMemory(m: ir.DefMemory, connects: Connects, initValue: Option[MemoryInitValue]): (State, Connects) = {
+    checkMem(m)
+
+    // map of inputs to the memory
+    val inputs = connects.filter(_._1.startsWith(m.name)).toMap
+
+    // derive the type of the memory from the dataType and depth
+    val dataWidth = bitWidth(m.dataType).toInt
+    val indexWidth = Utils.getUIntWidth(m.depth - 1).max(1)
+    val memSymbol = ArraySymbol(m.name, indexWidth, dataWidth)
+
+    // there could be a constant init
+    val init = initValue.map(getInit(m, indexWidth, dataWidth, _))
+    init.foreach(e => assert(e.dataWidth == memSymbol.dataWidth && e.indexWidth == memSymbol.indexWidth))
+
+    // derive next state expression
+    val next = if (m.writers.isEmpty) {
+      memSymbol
+    } else {
+      m.writers.foldLeft[ArrayExpr](memSymbol) {
+        case (prev, write) =>
+          // update
+          val addr = BVSymbol(memPortField(m, write, "addr").serialize, indexWidth)
+          val data = BVSymbol(memPortField(m, write, "data").serialize, dataWidth)
+          val update = ArrayStore(prev, index = addr, data = data)
+
+          // update guard
+          val en = BVSymbol(memPortField(m, write, "en").serialize, 1)
+          val mask = BVSymbol(memPortField(m, write, "mask").serialize, 1)
+          val alwaysEnabled = Seq(en, mask).forall(s => inputs(s.name) == True)
+          if (alwaysEnabled) { update }
+          else {
+            ArrayIte(and(en, mask), update, prev)
+          }
+      }
+    }
+
+    val state = State(memSymbol, init, Some(next))
+
+    // derive read expressions
+    val readSignals = m.readers.map { read =>
+      val addr = BVSymbol(memPortField(m, read, "addr").serialize, indexWidth)
+      memPortField(m, read, "data").serialize -> ArrayRead(memSymbol, addr)
+    }
+
+    (state, readSignals)
+  }
+
+  private def getInit(m: ir.DefMemory, indexWidth: Int, dataWidth: Int, initValue: MemoryInitValue): ArrayExpr =
+    initValue match {
+      case MemoryScalarInit(value) => ArrayConstant(BVLiteral(value, dataWidth), indexWidth)
+      case MemoryArrayInit(values) =>
+        assert(
+          values.length == m.depth,
+          s"Memory ${m.name} of depth ${m.depth} cannot be initialized with an array of length ${values.length}!"
+        )
+        // in order to get a more compact encoding try to find the most common values
+        val histogram = mutable.LinkedHashMap[BigInt, Int]()
+        values.foreach(v => histogram(v) = 1 + histogram.getOrElse(v, 0))
+        val baseValue = histogram.maxBy(_._2)._1
+        val base = ArrayConstant(BVLiteral(baseValue, dataWidth), indexWidth)
+        values.zipWithIndex
+          .filterNot(_._1 == baseValue)
+          .foldLeft[ArrayExpr](base) {
+            case (array, (value, index)) =>
+              ArrayStore(array, BVLiteral(index, indexWidth), BVLiteral(value, dataWidth))
+          }
+      case other => throw new RuntimeException(s"Unsupported memory init option: $other")
+    }
+
+  // TODO: add to BV expression library
+  private def and(a: BVExpr, b: BVExpr): BVExpr = (a, b) match {
+    case (True, True) => True
+    case (True, x)    => x
+    case (x, True)    => x
+    case _            => BVOp(Op.And, a, b)
+  }
+
+  private val True = BVLiteral(1, 1)
+  private def checkMem(m: ir.DefMemory): Unit = {
+    assert(m.readLatency == 0, "Expected read latency to be 0. Did you run VerilogMemDelays?")
+    assert(m.writeLatency == 1, "Expected read latency to be 1. Did you run VerilogMemDelays?")
+    assert(
+      m.dataType.isInstanceOf[ir.GroundType],
+      s"Memory $m is of type ${m.dataType} which is not a ground type!"
+    )
+    assert(m.readwriters.isEmpty, "Combined read/write ports are not supported! Please split them up.")
+  }
+
   private val InfoSeparator = ", "
   private val InfoPrefix = "@ "
   private def serializeInfo(info: ir.Info): Option[String] = info match {
@@ -236,227 +351,12 @@ private class ModuleToTransitionSystem extends LazyLogging {
       if (infos.isEmpty) { None }
       else { Some(infos.map(_.escaped).mkString(InfoSeparator)) }
   }
-
-  private[firrtl] val randoms = mutable.LinkedHashMap[String, BVSymbol]()
-  private def makeRandom(baseName: String, width: Int): BVExpr = {
-    // TODO: actually ensure that there cannot be any name clashes with other identifiers
-    val suffixes = Iterator(baseName) ++ (0 until 200).map(ii => baseName + "_" + ii)
-    val name = suffixes.map(s => "RANDOM." + s).find(!randoms.contains(_)).get
-    val sym = BVSymbol(name, width)
-    randoms(name) = sym
-    sym
-  }
-}
-
-private class MemoryEncoding(makeRandom: (String, Int) => BVExpr, namespace: Namespace) extends LazyLogging {
-  type Connects = Iterable[(String, BVExpr)]
-  def onMemory(
-    defMem:    ir.DefMemory,
-    connects:  Connects,
-    initValue: Option[MemoryInitValue]
-  ): (Iterable[State], Connects) = {
-    // we can only work on appropriately lowered memories
-    assert(
-      defMem.dataType.isInstanceOf[ir.GroundType],
-      s"Memory $defMem is of type ${defMem.dataType} which is not a ground type!"
-    )
-    assert(defMem.readwriters.isEmpty, "Combined read/write ports are not supported! Please split them up.")
-
-    // collect all memory meta-data in a custom class
-    val m = new MemInfo(defMem)
-
-    // find all connections related to this memory
-    val inputs = connects.filter(_._1.startsWith(m.prefix)).toMap
-
-    // there could be a constant init
-    val init = initValue.map(getInit(m, _))
-
-    // parse and check read and write ports
-    val writers = defMem.writers.map(w => new WritePort(m, w, inputs))
-    val readers = defMem.readers.map(r => new ReadPort(m, r, inputs))
-
-    // derive next state from all write ports
-    assert(defMem.writeLatency == 1, "Only memories with write-latency of one are supported.")
-    val next: ArrayExpr = if (writers.isEmpty) { m.sym }
-    else {
-      if (writers.length > 2) {
-        throw new UnsupportedFeatureException(s"memories with 3+ write ports (${m.name})")
-      }
-      val validData = writers.foldLeft[ArrayExpr](m.sym) { case (sym, w) => w.writeTo(sym) }
-      if (writers.length == 1) { validData }
-      else {
-        assert(writers.length == 2)
-        val conflict = writers.head.doesConflict(writers.last)
-        val conflictData = writers.head.makeRandomData("_write_write_collision")
-        val conflictStore = ArrayStore(m.sym, writers.head.addr, conflictData)
-        ArrayIte(conflict, conflictStore, validData)
-      }
-    }
-    val state = State(m.sym, init, Some(next))
-
-    // derive data signals from all read ports
-    assert(defMem.readLatency >= 0)
-    if (defMem.readLatency > 1) {
-      throw new UnsupportedFeatureException(s"memories with read latency 2+ (${m.name})")
-    }
-    val readPortSignals = if (defMem.readLatency == 0) {
-      readers.map { r =>
-        // combinatorial read
-        if (defMem.readUnderWrite != ir.ReadUnderWrite.New) {
-          logger.warn(
-            s"WARN: Memory ${m.name} with combinatorial read port will always return the most recently written entry." +
-              s" The read-under-write => ${defMem.readUnderWrite} setting will be ignored."
-          )
-        }
-        // since we do a combinatorial read, the "old" data is the current data
-        val data = r.read()
-        r.data.name -> data
-      }
-    } else { Seq() }
-    val readPortSignalsAndStates = if (defMem.readLatency == 1) {
-      readers.map { r =>
-        defMem.readUnderWrite match {
-          case ir.ReadUnderWrite.New =>
-            // create a state to save the address and the enable signal
-            val enPrev = BVSymbol(namespace.newName(r.en.name + "_prev"), r.en.width)
-            val addrPrev = BVSymbol(namespace.newName(r.addr.name + "_prev"), r.addr.width)
-            val signal = r.data.name -> r.read(addr = addrPrev, en = enPrev)
-            val states = Seq(State(enPrev, None, next = Some(r.en)), State(addrPrev, None, next = Some(r.addr)))
-            (Seq(signal), states)
-          case ir.ReadUnderWrite.Undefined =>
-            // check for potential read/write conflicts in which case we need to return an arbitrary value
-            val anyWriteToTheSameAddress = any(writers.map(_.doesConflict(r)))
-            val next = if (anyWriteToTheSameAddress == False) { r.read() }
-            else {
-              val readUnderWriteData = r.makeRandomData("_read_under_write_undefined")
-              BVIte(anyWriteToTheSameAddress, readUnderWriteData, r.read())
-            }
-            (Seq(), Seq(State(r.data, init = None, next = Some(next))))
-          case ir.ReadUnderWrite.Old =>
-            // we create a register for the read port data
-            (Seq(), Seq(State(r.data, init = None, next = Some(r.read()))))
-        }
-      }
-    } else { Seq() }
-
-    val allReadPortSignals = readPortSignals ++ readPortSignalsAndStates.flatMap(_._1)
-    val readPortStates = readPortSignalsAndStates.flatMap(_._2)
-
-    (state +: readPortStates, allReadPortSignals)
-  }
-
-  private def getInit(m: MemInfo, initValue: MemoryInitValue): ArrayExpr = initValue match {
-    case MemoryScalarInit(value) => ArrayConstant(BVLiteral(value, m.dataWidth), m.indexWidth)
-    case MemoryArrayInit(values) =>
-      assert(
-        values.length == m.depth,
-        s"Memory ${m.name} of depth ${m.depth} cannot be initialized with an array of length ${values.length}!"
-      )
-      // in order to get a more compact encoding try to find the most common values
-      val histogram = mutable.LinkedHashMap[BigInt, Int]()
-      values.foreach(v => histogram(v) = 1 + histogram.getOrElse(v, 0))
-      val baseValue = histogram.maxBy(_._2)._1
-      val base = ArrayConstant(BVLiteral(baseValue, m.dataWidth), m.indexWidth)
-      values.zipWithIndex
-        .filterNot(_._1 == baseValue)
-        .foldLeft[ArrayExpr](base) {
-          case (array, (value, index)) =>
-            ArrayStore(array, BVLiteral(index, m.indexWidth), BVLiteral(value, m.dataWidth))
-        }
-    case other => throw new RuntimeException(s"Unsupported memory init option: $other")
-  }
-
-  private class MemInfo(m: ir.DefMemory) {
-    val name = m.name
-    val depth = m.depth
-    // derrive the type of the memory from the dataType and depth
-    val dataWidth = getWidth(m.dataType)
-    val indexWidth = Utils.getUIntWidth(m.depth - 1).max(1)
-    val sym = ArraySymbol(m.name, indexWidth, dataWidth)
-    val prefix = m.name + "."
-    val fullAddressRange = (BigInt(1) << indexWidth) == m.depth
-    lazy val depthBV = BVLiteral(m.depth, indexWidth)
-    def isValidAddress(addr: BVExpr): BVExpr = {
-      if (fullAddressRange) { True }
-      else {
-        BVComparison(Compare.Greater, depthBV, addr, signed = false)
-      }
-    }
-  }
-  private abstract class MemPort(memory: MemInfo, val name: String, inputs: String => BVExpr) {
-    val en:   BVSymbol = makeField("en", 1)
-    val data: BVSymbol = makeField("data", memory.dataWidth)
-    val addr: BVSymbol = makeField("addr", memory.indexWidth)
-    protected def makeField(field: String, width: Int): BVSymbol = BVSymbol(memory.prefix + name + "." + field, width)
-    // make sure that all widths are correct
-    assert(inputs(en.name).width == en.width)
-    assert(inputs(addr.name).width == addr.width)
-    val enIsTrue: Boolean = inputs(en.name) == True
-    def makeRandomData(suffix: String): BVExpr =
-      makeRandom(memory.name + "_" + name + suffix, memory.dataWidth)
-    def read(addr: BVSymbol = addr, en: BVSymbol = en): BVExpr = {
-      val canBeOutOfRange = !memory.fullAddressRange
-      val canBeDisabled = !enIsTrue
-      val data = ArrayRead(memory.sym, addr)
-      val dataWithRangeCheck = if (canBeOutOfRange) {
-        val outOfRangeData = makeRandomData("_addr_out_of_range")
-        BVIte(memory.isValidAddress(addr), data, outOfRangeData)
-      } else { data }
-      val dataWithEnabledCheck = if (canBeDisabled) {
-        val disabledData = makeRandomData("_not_enabled")
-        BVIte(en, dataWithRangeCheck, disabledData)
-      } else { dataWithRangeCheck }
-      dataWithEnabledCheck
-    }
-  }
-  private class WritePort(memory: MemInfo, name: String, inputs: String => BVExpr)
-      extends MemPort(memory, name, inputs) {
-    assert(inputs(data.name).width == data.width)
-    val mask: BVSymbol = makeField("mask", 1)
-    assert(inputs(mask.name).width == mask.width)
-    val maskIsTrue: Boolean = inputs(mask.name) == True
-    val doWrite: BVExpr = (enIsTrue, maskIsTrue) match {
-      case (true, true)   => True
-      case (true, false)  => mask
-      case (false, true)  => en
-      case (false, false) => and(en, mask)
-    }
-    def doesConflict(r: ReadPort): BVExpr = {
-      val sameAddress = BVEqual(r.addr, addr)
-      if (doWrite == True) { sameAddress }
-      else { and(doWrite, sameAddress) }
-    }
-    def doesConflict(w: WritePort): BVExpr = {
-      val bothWrite = and(doWrite, w.doWrite)
-      val sameAddress = BVEqual(addr, w.addr)
-      if (bothWrite == True) { sameAddress }
-      else { and(bothWrite, sameAddress) }
-    }
-    def writeTo(array: ArrayExpr): ArrayExpr = {
-      val doUpdate = if (memory.fullAddressRange) doWrite else and(doWrite, memory.isValidAddress(addr))
-      val update = ArrayStore(array, index = addr, data = data)
-      if (doUpdate == True) update else ArrayIte(doUpdate, update, array)
-    }
-
-  }
-  private class ReadPort(memory: MemInfo, name: String, inputs: String => BVExpr)
-      extends MemPort(memory, name, inputs) {}
-
-  private def and(a: BVExpr, b: BVExpr): BVExpr = (a, b) match {
-    case (True, True) => True
-    case (True, x)    => x
-    case (x, True)    => x
-    case _            => BVOp(Op.And, a, b)
-  }
-  private def or(a: BVExpr, b: BVExpr): BVExpr = BVOp(Op.Or, a, b)
-  private val True = BVLiteral(1, 1)
-  private val False = BVLiteral(0, 1)
-  private def all(b: Iterable[BVExpr]): BVExpr = if (b.isEmpty) False else b.reduce((a, b) => and(a, b))
-  private def any(b: Iterable[BVExpr]): BVExpr = if (b.isEmpty) True else b.reduce((a, b) => or(a, b))
 }
 
 // performas a first pass over the module collecting all connections, wires, registers, input and outputs
-private class ModuleScanner(makeRandom: (String, Int) => BVExpr) extends LazyLogging {
+private class ModuleScanner(
+  uninterpreted: Map[String, UninterpretedModuleAnnotation])
+    extends LazyLogging {
   import FirrtlExpressionSemantics.getWidth
 
   private[firrtl] val inputs = mutable.ArrayBuffer[BVSymbol]()
@@ -473,10 +373,13 @@ private class ModuleScanner(makeRandom: (String, Int) => BVExpr) extends LazyLog
   private[firrtl] val assumes = mutable.ArrayBuffer[String]()
   // maps identifiers to their info
   private[firrtl] val infos = mutable.ArrayBuffer[(String, ir.Info)]()
-  // keeps track of unused memory (data) outputs so that we can see where they are first used
-  private val unusedMemOutputs = mutable.LinkedHashMap[String, Int]()
+  // Keeps track of (so far) unused memory (data) and uninterpreted module outputs.
+  // This is used in order to delay declaring them for as long as possible.
+  private val unusedOutputs = mutable.LinkedHashMap[String, BVExpr]()
   // ensure unique names for assert/assume signals
   private[firrtl] val namespace = Namespace()
+  // keep track of all uninterpreted functions called
+  private[firrtl] val functionCalls = mutable.ArrayBuffer[BVFunctionSymbol]()
 
   private[firrtl] def onPort(p: ir.Port): Unit = {
     if (isAsyncReset(p.tpe)) {
@@ -489,7 +392,7 @@ private class ModuleScanner(makeRandom: (String, Int) => BVExpr) extends LazyLog
         if (isClock(p.tpe)) {
           clocks.add(p.name)
         } else {
-          inputs.append(BVSymbol(p.name, getWidth(p.tpe)))
+          inputs.append(BVSymbol(p.name, bitWidth(p.tpe).toInt))
         }
       case ir.Output =>
         if (!isClock(p.tpe)) { // we ignore clock outputs
@@ -499,6 +402,12 @@ private class ModuleScanner(makeRandom: (String, Int) => BVExpr) extends LazyLog
   }
 
   private[firrtl] def onStatement(s: ir.Statement): Unit = s match {
+    case DefRandom(info, name, tpe, _, _) =>
+      namespace.newName(name)
+      assert(!isClock(tpe), "rand should never be a clock!")
+      // we model random sources as inputs and ignore the enable signal
+      infos.append(name -> info)
+      inputs.append(BVSymbol(name, bitWidth(tpe).toInt))
     case ir.DefWire(info, name, tpe) =>
       namespace.newName(name)
       if (!isClock(tpe)) {
@@ -508,79 +417,50 @@ private class ModuleScanner(makeRandom: (String, Int) => BVExpr) extends LazyLog
     case ir.DefNode(info, name, expr) =>
       namespace.newName(name)
       if (!isClock(expr.tpe)) {
-        insertDummyAssignsForMemoryOutputs(expr)
+        insertDummyAssignsForUnusedOutputs(expr)
         infos.append(name -> info)
-        val e = onExpression(expr, name)
+        val e = onExpression(expr)
         nodes.append(name)
         connects.append((name, e))
       }
     case ir.DefRegister(info, name, tpe, _, reset, init) =>
       namespace.newName(name)
-      insertDummyAssignsForMemoryOutputs(reset)
-      insertDummyAssignsForMemoryOutputs(init)
+      insertDummyAssignsForUnusedOutputs(reset)
+      insertDummyAssignsForUnusedOutputs(init)
       infos.append(name -> info)
-      val width = getWidth(tpe)
-      val resetExpr = onExpression(reset, 1, name + "_reset")
-      val initExpr = onExpression(init, width, name + "_init")
+      val width = bitWidth(tpe).toInt
+      val resetExpr = onExpression(reset, 1)
+      val initExpr = onExpression(init, width)
       registers.append((name, width, resetExpr, initExpr))
     case m: ir.DefMemory =>
       namespace.newName(m.name)
       infos.append(m.name -> m.info)
       val outputs = getMemOutputs(m)
       (getMemInputs(m) ++ outputs).foreach(memSignals.append(_))
-      val dataWidth = getWidth(m.dataType)
-      outputs.foreach(name => unusedMemOutputs(name) = dataWidth)
+      val dataWidth = bitWidth(m.dataType).toInt
+      outputs.foreach(name => unusedOutputs(name) = BVSymbol(name, dataWidth))
       memories.append(m)
     case ir.Connect(info, loc, expr) =>
       if (!isGroundType(loc.tpe)) error("All connects should have been lowered to ground type!")
       if (!isClock(loc.tpe)) { // we ignore clock connections
         val name = loc.serialize
-        insertDummyAssignsForMemoryOutputs(expr)
+        insertDummyAssignsForUnusedOutputs(expr)
         infos.append(name -> info)
-        connects.append((name, onExpression(expr, getWidth(loc.tpe), name)))
+        connects.append((name, onExpression(expr, bitWidth(loc.tpe).toInt)))
       }
-    case ir.IsInvalid(info, loc) =>
+    case i @ ir.IsInvalid(info, loc) =>
       if (!isGroundType(loc.tpe)) error("All connects should have been lowered to ground type!")
-      val name = loc.serialize
-      infos.append(name -> info)
-      connects.append((name, makeRandom(name + "_INVALID", getWidth(loc.tpe))))
-    case ir.DefInstance(info, name, module, tpe) =>
-      namespace.newName(name)
-      if (!tpe.isInstanceOf[ir.BundleType]) error(s"Instance $name of $module has an invalid type: ${tpe.serialize}")
-      // we treat all instances as blackboxes
-      logger.warn(
-        s"WARN: treating instance $name of $module as blackbox. " +
-          "Please flatten your hierarchy if you want to include submodules in the formal model."
-      )
-      val ports = tpe.asInstanceOf[ir.BundleType].fields
-      // skip async reset ports
-      ports.filterNot(p => isAsyncReset(p.tpe)).foreach { p =>
-        if (!p.tpe.isInstanceOf[ir.GroundType]) error(s"Instance $name of $module has an invalid port type: $p")
-        val isOutput = p.flip == ir.Default
-        val pName = name + "." + p.name
-        infos.append(pName -> info)
-        // outputs of the submodule become inputs to our module
-        if (isOutput) {
-          if (isClock(p.tpe)) {
-            clocks.add(pName)
-          } else {
-            inputs.append(BVSymbol(pName, getWidth(p.tpe)))
-          }
-        } else {
-          if (!isClock(p.tpe)) { // we ignore clock outputs
-            outputs.append(pName)
-          }
-        }
-      }
+      throw new UnsupportedFeatureException(s"IsInvalid statements are not supported: ${i.serialize}")
+    case ir.DefInstance(info, name, module, tpe) => onInstance(info, name, module, tpe)
     case s @ ir.Verification(op, info, _, pred, en, msg) =>
       if (op == ir.Formal.Cover) {
         logger.warn(s"WARN: Cover statement was ignored: ${s.serialize}")
       } else {
-        insertDummyAssignsForMemoryOutputs(pred)
-        insertDummyAssignsForMemoryOutputs(en)
+        insertDummyAssignsForUnusedOutputs(pred)
+        insertDummyAssignsForUnusedOutputs(en)
         val name = namespace.newName(msgToName(op.toString, msg.string))
-        val predicate = onExpression(pred, name + "_predicate")
-        val enabled = onExpression(en, name + "_enabled")
+        val predicate = onExpression(pred)
+        val enabled = onExpression(en)
         val e = BVImplies(enabled, predicate)
         infos.append(name -> info)
         connects.append(name -> e)
@@ -604,6 +484,70 @@ private class ModuleScanner(makeRandom: (String, Int) => BVExpr) extends LazyLog
     case other => other.foreachStmt(onStatement)
   }
 
+  private def onInstance(info: ir.Info, name: String, module: String, tpe: ir.Type): Unit = {
+    namespace.newName(name)
+    if (!tpe.isInstanceOf[ir.BundleType]) error(s"Instance $name of $module has an invalid type: ${tpe.serialize}")
+    if (uninterpreted.contains(module)) {
+      onUninterpretedInstance(info: ir.Info, name: String, module: String, tpe: ir.Type)
+    } else {
+      // We treat all instances that aren't annotated as uninterpreted as blackboxes
+      // this means that their outputs could be any value, no matter what their inputs are.
+      logger.warn(
+        s"WARN: treating instance $name of $module as blackbox. " +
+          "Please flatten your hierarchy if you want to include submodules in the formal model."
+      )
+      val ports = tpe.asInstanceOf[ir.BundleType].fields
+      // skip async reset ports
+      ports.filterNot(p => isAsyncReset(p.tpe)).foreach { p =>
+        if (!p.tpe.isInstanceOf[ir.GroundType]) error(s"Instance $name of $module has an invalid port type: $p")
+        val isOutput = p.flip == ir.Default
+        val pName = name + "." + p.name
+        infos.append(pName -> info)
+        // outputs of the submodule become inputs to our module
+        if (isOutput) {
+          if (isClock(p.tpe)) {
+            clocks.add(pName)
+          } else {
+            inputs.append(BVSymbol(pName, bitWidth(p.tpe).toInt))
+          }
+        } else {
+          if (!isClock(p.tpe)) { // we ignore clock outputs
+            outputs.append(pName)
+          }
+        }
+      }
+    }
+  }
+
+  private def onUninterpretedInstance(info: ir.Info, instanceName: String, module: String, tpe: ir.Type): Unit = {
+    val anno = uninterpreted(module)
+
+    // sanity checks for ports were done already using the UninterpretedModule.checkModule function
+    val ports = tpe.asInstanceOf[ir.BundleType].fields
+
+    val outputs = ports.filter(_.flip == ir.Default).map(p => BVSymbol(p.name, bitWidth(p.tpe).toInt))
+    val inputs = ports.filterNot(_.flip == ir.Default).map(p => BVSymbol(p.name, bitWidth(p.tpe).toInt))
+
+    assert(anno.stateBits == 0, "TODO: implement support for uninterpreted stateful modules!")
+
+    // for state-less (i.e. combinatorial) circuits, the outputs only depend on the inputs
+    val args = inputs.map(i => BVSymbol(instanceName + "." + i.name, i.width)).toList
+    outputs.foreach { out =>
+      val functionName = anno.prefix + "." + out.name
+      val call = BVFunctionCall(functionName, args, out.width)
+      val wireName = instanceName + "." + out.name
+      // remember which functions were called
+      functionCalls.append(call.toSymbol)
+      // insert the output definition right before its first use in an attempt to get SSA
+      unusedOutputs(wireName) = call
+      // treat these outputs as wires
+      wires.append(wireName)
+    }
+
+    // we also treat the arguments as wires
+    wires ++= args.map(_.name)
+  }
+
   private val readInputFields = List("en", "addr")
   private val writeInputFields = List("en", "mask", "addr", "data")
   private def getMemInputs(m: ir.DefMemory): Iterable[String] = {
@@ -617,39 +561,37 @@ private class ModuleScanner(makeRandom: (String, Int) => BVExpr) extends LazyLog
     val p = m.name + "."
     m.readers.map(r => p + r + ".data")
   }
-  // inserts a dummy assign right before a memory output is used for the first time
+  // inserts a dummy assign right before a memory/uninterpreted module output is used for the first time
   // example:
   // m.r.data <= m.r.data ; this is the dummy assign
   // test <= m.r.data     ; this is the first use of m.r.data
-  private def insertDummyAssignsForMemoryOutputs(next: ir.Expression): Unit = if (unusedMemOutputs.nonEmpty) {
-    implicit val uses = mutable.ArrayBuffer[String]()
-    findUnusedMemoryOutputUse(next)
+  private def insertDummyAssignsForUnusedOutputs(next: ir.Expression): Unit = if (unusedOutputs.nonEmpty) {
+    val uses = mutable.ArrayBuffer[String]()
+    findUnusedOutputUse(next)(uses)
     if (uses.nonEmpty) {
       val useSet = uses.toSet
-      unusedMemOutputs.foreach {
-        case (name, width) =>
-          if (useSet.contains(name)) connects.append(name -> BVSymbol(name, width))
+      unusedOutputs.foreach {
+        case (name, value) =>
+          if (useSet.contains(name)) connects.append(name -> value)
       }
-      useSet.foreach(name => unusedMemOutputs.remove(name))
+      useSet.foreach(name => unusedOutputs.remove(name))
     }
   }
-  private def findUnusedMemoryOutputUse(e: ir.Expression)(implicit uses: mutable.ArrayBuffer[String]): Unit = e match {
+  private def findUnusedOutputUse(e: ir.Expression)(implicit uses: mutable.ArrayBuffer[String]): Unit = e match {
     case s: ir.SubField =>
       val name = s.serialize
-      if (unusedMemOutputs.contains(name)) uses.append(name)
-    case other => other.foreachExpr(findUnusedMemoryOutputUse)
+      if (unusedOutputs.contains(name)) uses.append(name)
+    case other => other.foreachExpr(findUnusedOutputUse)
   }
 
-  private case class Context(baseName: String) extends TranslationContext {
-    override def getRandom(width: Int): BVExpr = makeRandom(baseName, width)
-  }
+  private case class Context() extends TranslationContext {}
 
-  private def onExpression(e: ir.Expression, width: Int, randomPrefix: String): BVExpr = {
-    implicit val ctx: TranslationContext = Context(randomPrefix)
+  private def onExpression(e: ir.Expression, width: Int): BVExpr = {
+    implicit val ctx: TranslationContext = Context()
     FirrtlExpressionSemantics.toSMT(e, width, allowNarrow = false)
   }
-  private def onExpression(e: ir.Expression, randomPrefix: String): BVExpr = {
-    implicit val ctx: TranslationContext = Context(randomPrefix)
+  private def onExpression(e: ir.Expression): BVExpr = {
+    implicit val ctx: TranslationContext = Context()
     FirrtlExpressionSemantics.toSMT(e)
   }
 

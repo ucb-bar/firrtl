@@ -147,7 +147,7 @@ class ConnectionGraph protected (val circuit: Circuit, val digraph: DiGraph[Refe
     val bfsQueue = new mutable.PriorityQueue[ReferenceTarget]()(ordering)
     bfsQueue.enqueue(root)
     while (bfsQueue.nonEmpty) {
-      val u = bfsQueue.dequeue
+      val u = bfsQueue.dequeue()
       for (v <- getEdges(u)) {
         if (!prev.contains(v) && !blacklist.contains(v)) {
           prev(v) = u
@@ -416,6 +416,7 @@ object ConnectionGraph {
         case firrtl.ir.Field(name, Default, tpe) => Utils.create_exps(Reference(name, tpe, PortKind, SourceFlow))
         // Module input
         case firrtl.ir.Field(name, Flip, tpe) => Utils.create_exps(Reference(name, tpe, PortKind, SinkFlow))
+        case x                                => Utils.error(s"Unexpected flip: ${x.flip}")
       }
       assert(instPorts.size == modulePorts.size)
       val o = m.circuitTarget.module(ofModule)

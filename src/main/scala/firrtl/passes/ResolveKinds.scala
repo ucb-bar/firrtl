@@ -5,11 +5,12 @@ package firrtl.passes
 import firrtl._
 import firrtl.ir._
 import firrtl.Mappers._
+import firrtl.backends.experimental.smt.random.DefRandom
 import firrtl.traversals.Foreachers._
 
 object ResolveKinds extends Pass {
 
-  override def prerequisites = firrtl.stage.Forms.WorkingIR
+  override def prerequisites = firrtl.stage.Forms.MinimalHighForm
 
   override def invalidates(a: Transform) = false
 
@@ -31,6 +32,7 @@ object ResolveKinds extends Pass {
       case sx: DefRegister  => kinds(sx.name) = RegKind
       case sx: WDefInstance => kinds(sx.name) = InstanceKind
       case sx: DefMemory    => kinds(sx.name) = MemKind
+      case sx: DefRandom    => kinds(sx.name) = RandomKind
       case _ =>
     }
     s.map(resolve_stmt(kinds))

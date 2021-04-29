@@ -2,27 +2,20 @@
 
 enablePlugins(SiteScaladocPlugin)
 
-def javacOptionsVersion(scalaVersion: String): Seq[String] = {
-  Seq() ++ {
-    // Scala 2.12 requires Java 8, but we continue to generate
-    //  Java 7 compatible code until we need Java 8 features
-    //  for compatibility with old clients.
-    CrossVersion.partialVersion(scalaVersion) match {
-      case Some((2, scalaMajor: Long)) if scalaMajor < 12 =>
-        Seq("-source", "1.7", "-target", "1.7")
-      case _ =>
-        Seq("-source", "1.8", "-target", "1.8")
-    }
-  }
-}
-
-
 lazy val commonSettings = Seq(
   organization := "edu.berkeley.cs",
+  scalaVersion := "2.12.13",
+  crossScalaVersions := Seq("2.13.4", "2.12.13")
+)
+
+lazy val isAtLeastScala213 = Def.setting {
+  import Ordering.Implicits._
+  CrossVersion.partialVersion(scalaVersion.value).exists(_ >= (2, 13))
+}
+
+lazy val firrtlSettings = Seq(
   name := "firrtl",
   version := "1.5-SNAPSHOT",
-  scalaVersion := "2.12.12",
-  crossScalaVersions := Seq("2.13.2", "2.12.12", "2.11.12"),
   addCompilerPlugin(scalafixSemanticdb),
   scalacOptions := Seq(
     "-deprecation",
@@ -32,27 +25,42 @@ lazy val commonSettings = Seq(
     "-language:implicitConversions",
     "-Yrangepos",          // required by SemanticDB compiler plugin
   ),
-  javacOptions ++= javacOptionsVersion(scalaVersion.value),
+  // Always target Java8 for maximum compatibility
+  javacOptions ++= Seq("-source", "1.8", "-target", "1.8"),
   libraryDependencies ++= Seq(
     "org.scala-lang" % "scala-reflect" % scalaVersion.value,
-    "org.scalatest" %% "scalatest" % "3.2.0" % "test",
+    "org.scalatest" %% "scalatest" % "3.2.8" % "test",
     "org.scalatestplus" %% "scalacheck-1-14" % "3.1.3.0" % "test",
     "com.github.scopt" %% "scopt" % "3.7.1",
     "net.jcazevedo" %% "moultingyaml" % "0.4.2",
-    "org.json4s" %% "json4s-native" % "3.6.9",
-    "org.apache.commons" % "commons-text" % "1.8"
+    "org.json4s" %% "json4s-native" % "3.6.11",
+    "org.apache.commons" % "commons-text" % "1.8",
+    "io.github.alexarchambault" %% "data-class" % "0.2.5",
   ),
+  // macros for the data-class library
+  libraryDependencies ++= {
+    if (isAtLeastScala213.value) Nil
+    else Seq(compilerPlugin("org.scalamacros" % "paradise" % "2.1.1" cross CrossVersion.full))
+  },
+  scalacOptions ++= {
+    if (isAtLeastScala213.value) Seq("-Ymacro-annotations")
+    else Nil
+  },
   // starting with scala 2.13 the parallel collections are separate from the standard library
   libraryDependencies ++= {
     CrossVersion.partialVersion(scalaVersion.value) match {
       case Some((2, major)) if major <= 12 => Seq()
-      case _ => Seq("org.scala-lang.modules" %% "scala-parallel-collections" % "0.2.0")
+      case _ => Seq("org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.2")
     }
   },
   resolvers ++= Seq(
     Resolver.sonatypeRepo("snapshots"),
     Resolver.sonatypeRepo("releases")
   )
+)
+
+lazy val mimaSettings = Seq(
+  mimaPreviousArtifacts := Set()
 )
 
 lazy val protobufSettings = Seq(
@@ -85,16 +93,15 @@ lazy val antlrSettings = Seq(
   antlr4GenVisitor in Antlr4 := true,
   antlr4GenListener in Antlr4 := false,
   antlr4PackageName in Antlr4 := Option("firrtl.antlr"),
-  antlr4Version in Antlr4 := "4.8",
+  antlr4Version in Antlr4 := "4.9.2",
   javaSource in Antlr4 := (sourceManaged in Compile).value
 )
 
 lazy val publishSettings = Seq(
-  // publishMavenStyle and publishTo handled by sbt-ci-release
+  publishMavenStyle := true,
   publishArtifact in Test := false,
   pomIncludeRepository := { x => false },
-  // Don't add 'scm' elements if we have a git.remoteRepo definition,
-  //  but since we don't (with the removal of ghpages), add them in below.
+  // scm is set by sbt-ci-release
   pomExtra := <url>http://chisel.eecs.berkeley.edu/</url>
     <licenses>
       <license>
@@ -103,10 +110,6 @@ lazy val publishSettings = Seq(
         <distribution>repo</distribution>
       </license>
     </licenses>
-    <scm>
-      <url>https://github.com/freechipsproject/firrtl.git</url>
-      <connection>scm:git:github.com/freechipsproject/firrtl.git</connection>
-    </scm>
     <developers>
       <developer>
         <id>jackbackrack</id>
@@ -114,25 +117,23 @@ lazy val publishSettings = Seq(
         <url>http://www.eecs.berkeley.edu/~jrb/</url>
       </developer>
     </developers>,
+  publishTo := {
+    val v = version.value
+    val nexus = "https://oss.sonatype.org/"
+    if (v.trim.endsWith("SNAPSHOT")) {
+      Some("snapshots" at nexus + "content/repositories/snapshots")
+    } else {
+      Some("releases" at nexus + "service/local/staging/deploy/maven2")
+    }
+  }
 )
 
 
-def scalacDocOptionsVersion(scalaVersion: String): Seq[String] = {
-  Seq() ++ {
-    // If we're building with Scala > 2.11, enable the compile option
-    //  to flag warnings as errors. This must be disabled for 2.11 since
-    //  references to the Java class library from Java 9 on generate warnings.
-    //  https://github.com/scala/bug/issues/10675
-    CrossVersion.partialVersion(scalaVersion) match {
-      case Some((2, scalaMajor: Long)) if scalaMajor < 12 => Seq()
-      case _ => Seq("-Xfatal-warnings")
-    }
-  }
-}
 lazy val docSettings = Seq(
   doc in Compile := (doc in ScalaUnidoc).value,
   autoAPIMappings := true,
   scalacOptions in Compile in doc ++= Seq(
+    "-Xfatal-warnings",
     "-feature",
     "-diagrams",
     "-diagrams-max-classes", "25",
@@ -148,9 +149,9 @@ lazy val docSettings = Seq(
         } else {
           s"v${version.value}"
         }
-      s"https://github.com/freechipsproject/firrtl/tree/$branch€{FILE_PATH}.scala"
+      s"https://github.com/chipsalliance/firrtl/tree/$branch€{FILE_PATH_EXT}#L€{FILE_LINE}"
     }
-  ) ++ scalacDocOptionsVersion(scalaVersion.value)
+  )
 )
 
 lazy val firrtl = (project in file("."))
@@ -162,6 +163,7 @@ lazy val firrtl = (project in file("."))
     Test / testForkedParallel := true
   )
   .settings(commonSettings)
+  .settings(firrtlSettings)
   .settings(protobufSettings)
   .settings(antlrSettings)
   .settings(assemblySettings)
@@ -175,9 +177,11 @@ lazy val firrtl = (project in file("."))
     buildInfoUsePackageAsPath := true,
     buildInfoKeys := Seq[BuildInfoKey](buildInfoPackage, version, scalaVersion, sbtVersion)
   )
+  .settings(mimaSettings)
 
 lazy val benchmark = (project in file("benchmark"))
   .dependsOn(firrtl)
+  .settings(commonSettings)
   .settings(
     assemblyJarName in assembly := "firrtl-benchmark.jar",
     test in assembly := {},
@@ -187,6 +191,7 @@ lazy val benchmark = (project in file("benchmark"))
 val JQF_VERSION = "1.5"
 
 lazy val jqf = (project in file("jqf"))
+  .settings(commonSettings)
   .settings(
     libraryDependencies ++= Seq(
       "edu.berkeley.cs.jqf" % "jqf-fuzz" % JQF_VERSION,
@@ -212,6 +217,7 @@ lazy val testClassAndMethodParser = {
 
 lazy val fuzzer = (project in file("fuzzer"))
   .dependsOn(firrtl)
+  .settings(commonSettings)
   .settings(
     libraryDependencies ++= Seq(
       "com.pholser" % "junit-quickcheck-core" % "0.8",

@@ -7,7 +7,14 @@ import firrtl.PrimOps._
 import firrtl.Utils._
 import firrtl.WrappedExpression._
 import firrtl.traversals.Foreachers._
-import firrtl.annotations.{CircuitTarget, ReferenceTarget, SingleTargetAnnotation}
+import firrtl.annotations.{
+  CircuitTarget,
+  MemoryLoadFileType,
+  MemoryNoSynthInit,
+  MemorySynthInit,
+  ReferenceTarget,
+  SingleTargetAnnotation
+}
 import firrtl.passes.LowerTypes
 import firrtl.passes.MemPortUtils._
 import firrtl.stage.TransformManager
@@ -57,6 +64,13 @@ object VerilogEmitter {
   private def precedenceGt(op1: PrimOp, op2: PrimOp): Boolean = {
     precedenceMap(op1) < precedenceMap(op2)
   }
+
+  /** Identifies PrimOps that never need parentheses
+    *
+    * These PrimOps emit either {..., a0, ...} or a0 so they never need parentheses
+    */
+  private val neverParens: PrimOp => Boolean =
+    Set(Shl, Cat, Cvt, AsUInt, AsSInt, AsClock, AsAsyncReset, Pad)
 }
 
 class VerilogEmitter extends SeqTransform with Emitter {
@@ -229,8 +243,7 @@ class VerilogEmitter extends SeqTransform with Emitter {
   // to ensure Verilog operations are signed.
   def op_stream(doprim: DoPrim): Seq[Any] = {
     def parenthesize(e: Expression, isFirst: Boolean): Any = doprim.op match {
-      // these PrimOps emit either {..., a0, ...} or a0 so they never need parentheses
-      case Shl | Cat | Cvt | AsUInt | AsSInt | AsClock | AsAsyncReset => e
+      case op if neverParens(op) => e
       case _ =>
         e match {
           case e: DoPrim =>
@@ -247,7 +260,8 @@ class VerilogEmitter extends SeqTransform with Emitter {
                */
               case other =>
                 val noParens =
-                  precedenceGt(e.op, doprim.op) ||
+                  neverParens(e.op) ||
+                    precedenceGt(e.op, doprim.op) ||
                     (isFirst && precedenceEq(e.op, doprim.op) && !isUnaryOp(e.op))
                 if (noParens) other else Seq("(", other, ")")
             }
@@ -474,6 +488,21 @@ class VerilogEmitter extends SeqTransform with Emitter {
 
     def getConnectEmissionOption(target: ReferenceTarget): ConnectEmissionOption =
       connectEmissionOption(target)
+
+    // Defines the memory initialization based on the annotation
+    // Defaults to having the memories inside the `ifndef SYNTHESIS` block
+    def emitMemoryInitAsNoSynth: Boolean = {
+      val annos = annotations.collect { case a @ (MemoryNoSynthInit | MemorySynthInit) => a }
+      annos match {
+        case Seq()                  => true
+        case Seq(MemoryNoSynthInit) => true
+        case Seq(MemorySynthInit)   => false
+        case other =>
+          throw new FirrtlUserException(
+            "There should only be at most one memory initialization option annotation, got $other"
+          )
+      }
+    }
 
     private val emissionAnnos = annotations.collect {
       case m: SingleTargetAnnotation[ReferenceTarget] @unchecked with EmissionOption => m
@@ -756,7 +785,7 @@ class VerilogEmitter extends SeqTransform with Emitter {
       val lines = noResetAlwaysBlocks.getOrElseUpdate(clk, ArrayBuffer[Seq[Any]]())
       if (weq(en, one)) lines += Seq(e, " <= ", value, ";")
       else {
-        lines += Seq("if(", en, ") begin")
+        lines += Seq("if (", en, ") begin")
         lines += Seq(tab, e, " <= ", value, ";", info)
         lines += Seq("end")
       }
@@ -849,6 +878,19 @@ class VerilogEmitter extends SeqTransform with Emitter {
             rstring,
             ";"
           )
+        case MemoryFileInlineInit(filename, hexOrBinary) =>
+          val readmem = hexOrBinary match {
+            case MemoryLoadFileType.Binary => "$readmemb"
+            case MemoryLoadFileType.Hex    => "$readmemh"
+          }
+          if (emissionOptions.emitMemoryInitAsNoSynth) {
+            memoryInitials += Seq(s"""$readmem("$filename", ${s.name});""")
+          } else {
+            val inlineLoad = s"""initial begin
+                                |    $readmem("$filename", ${s.name});
+                                |  end""".stripMargin
+            memoryInitials += Seq(inlineLoad)
+          }
       }
     }
 
@@ -1023,32 +1065,56 @@ class VerilogEmitter extends SeqTransform with Emitter {
           val decl = if (fullSize > (1 << 29)) "reg /* sparse */" else "reg"
           declareVectorType(decl, sx.name, sx.dataType, sx.depth, sx.info)
           initialize_mem(sx, options)
-          if (sx.readLatency != 0 || sx.writeLatency != 1)
+          // Currently, no idiomatic way to directly emit write-first RW ports
+          val hasComplexRW = (sx.readwriters.nonEmpty &&
+            (sx.readLatency != 1 || sx.readUnderWrite == ReadUnderWrite.New))
+          if (sx.readLatency > 1 || sx.writeLatency != 1 || hasComplexRW)
             throw EmitterException(
-              "All memories should be transformed into " +
-                "blackboxes or combinational by previous passses"
+              Seq(
+                s"Memory ${sx.name} is too complex to emit directly.",
+                "Consider running VerilogMemDelays to simplify complex memories.",
+                "Alternatively, add the --repl-seq-mem flag to replace memories with blackboxes."
+              ).mkString(" ")
             )
+          def createMemWire(firrtlRef: Expression, rhs: InfoExpr): Unit = {
+            // Don't use declaration-assignment, since this assignment might be emitted earlier than the
+            // actual connection to the memory port field in the source FIRRTL
+            declare("wire", LowerTypes.loweredName(firrtlRef), firrtlRef.tpe, MultiInfo(sx.info, rhs.info))
+            assign(firrtlRef, rhs)
+          }
+
           for (r <- sx.readers) {
             val data = memPortField(sx, r, "data")
             val addr = memPortField(sx, r, "addr")
-            // Ports should share an always@posedge, so can't have intermediary wire
-
-            declare("wire", LowerTypes.loweredName(data), data.tpe, sx.info)
-            declare("wire", LowerTypes.loweredName(addr), addr.tpe, sx.info)
-            // declare("wire", LowerTypes.loweredName(en), en.tpe)
-
-            //; Read port
-            assign(addr, netlist(addr))
-            // assign(en, netlist(en))     //;Connects value to m.r.en
-            val mem = WRef(sx.name, memType(sx), MemKind, UnknownFlow)
-            val memPort = WSubAccess(mem, addr, sx.dataType, UnknownFlow)
+            val en = memPortField(sx, r, "en")
+            val memPort = WSubAccess(WRef(sx), addr, sx.dataType, UnknownFlow)
             val depthValue = UIntLiteral(sx.depth, IntWidth(sx.depth.bitLength))
             val garbageGuard = DoPrim(Geq, Seq(addr, depthValue), Seq(), UnknownType)
 
-            if ((sx.depth & (sx.depth - 1)) == 0)
-              assign(data, memPort, sx.info)
-            else
-              garbageAssign(data, memPort, garbageGuard, sx.info)
+            val clkSource = netlist(memPortField(sx, r, "clk")).expr
+
+            createMemWire(en, netlist(en))
+
+            if (sx.readLatency == 1 && sx.readUnderWrite != ReadUnderWrite.Old) {
+              val InfoExpr(addrInfo, addrDriver) = netlist(addr)
+              declare("reg", LowerTypes.loweredName(addr), addr.tpe, sx.info)
+              initialize(WRef(LowerTypes.loweredName(addr), addr.tpe), zero, zero)
+              update(addr, addrDriver, clkSource, en, addrInfo)
+            } else {
+              createMemWire(addr, netlist(addr))
+            }
+
+            if (sx.readLatency == 1 && sx.readUnderWrite == ReadUnderWrite.Old) {
+              declare("reg", LowerTypes.loweredName(data), data.tpe, sx.info)
+              initialize(WRef(LowerTypes.loweredName(data), data.tpe), zero, zero)
+              update(data, memPort, clkSource, en, sx.info)
+            } else {
+              declare("wire", LowerTypes.loweredName(data), data.tpe, sx.info)
+              if ((sx.depth & (sx.depth - 1)) == 0)
+                assign(data, memPort, sx.info)
+              else
+                garbageAssign(data, memPort, garbageGuard, sx.info)
+            }
           }
 
           for (w <- sx.writers) {
@@ -1056,31 +1122,41 @@ class VerilogEmitter extends SeqTransform with Emitter {
             val addr = memPortField(sx, w, "addr")
             val mask = memPortField(sx, w, "mask")
             val en = memPortField(sx, w, "en")
-            //Ports should share an always@posedge, so can't have intermediary wire
-            // TODO should we use the info here for anything?
-            val InfoExpr(_, clk) = netlist(memPortField(sx, w, "clk"))
 
-            declare("wire", LowerTypes.loweredName(data), data.tpe, sx.info)
-            declare("wire", LowerTypes.loweredName(addr), addr.tpe, sx.info)
-            declare("wire", LowerTypes.loweredName(mask), mask.tpe, sx.info)
-            declare("wire", LowerTypes.loweredName(en), en.tpe, sx.info)
+            val clkSource = netlist(memPortField(sx, w, "clk")).expr
 
-            // Write port
-            assign(data, netlist(data))
-            assign(addr, netlist(addr))
-            assign(mask, netlist(mask))
-            assign(en, netlist(en))
+            createMemWire(data, netlist(data))
+            createMemWire(addr, netlist(addr))
+            createMemWire(mask, netlist(mask))
+            createMemWire(en, netlist(en))
 
-            val mem = WRef(sx.name, memType(sx), MemKind, UnknownFlow)
-            val memPort = WSubAccess(mem, addr, sx.dataType, UnknownFlow)
-            update(memPort, data, clk, AND(en, mask), sx.info)
+            val memPort = WSubAccess(WRef(sx), addr, sx.dataType, UnknownFlow)
+            update(memPort, data, clkSource, AND(en, mask), sx.info)
           }
 
-          if (sx.readwriters.nonEmpty)
-            throw EmitterException(
-              "All readwrite ports should be transformed into " +
-                "read & write ports by previous passes"
-            )
+          for (rw <- sx.readwriters) {
+            val rdata = memPortField(sx, rw, "rdata")
+            val wdata = memPortField(sx, rw, "wdata")
+            val addr = memPortField(sx, rw, "addr")
+            val en = memPortField(sx, rw, "en")
+            val wmode = memPortField(sx, rw, "wmode")
+            val wmask = memPortField(sx, rw, "wmask")
+            val memPort = WSubAccess(WRef(sx), addr, sx.dataType, UnknownFlow)
+
+            val clkSource = netlist(memPortField(sx, rw, "clk")).expr
+
+            createMemWire(wdata, netlist(wdata))
+            createMemWire(addr, netlist(addr))
+            createMemWire(wmode, netlist(wmode))
+            createMemWire(wmask, netlist(wmask))
+            createMemWire(en, netlist(en))
+
+            declare("reg", LowerTypes.loweredName(rdata), rdata.tpe, sx.info)
+            initialize(WRef(LowerTypes.loweredName(rdata), rdata.tpe), zero, zero)
+            update(rdata, memPort, clkSource, en, sx.info)
+            update(memPort, wdata, clkSource, AND(en, AND(wmode, wmask)), sx.info)
+          }
+
         case _ =>
       }
     }
@@ -1187,13 +1263,19 @@ class VerilogEmitter extends SeqTransform with Emitter {
         for (x <- initials) emit(Seq(tab, x))
         for (x <- asyncInitials) emit(Seq(tab, x))
         emit(Seq("  `endif // RANDOMIZE"))
-        for (x <- memoryInitials) emit(Seq(tab, x))
+
+        if (emissionOptions.emitMemoryInitAsNoSynth) {
+          for (x <- memoryInitials) emit(Seq(tab, x))
+        }
         emit(Seq("end // initial"))
         // User-defined macro of code to run after an initial block
         emit(Seq("`ifdef FIRRTL_AFTER_INITIAL"))
         emit(Seq("`FIRRTL_AFTER_INITIAL"))
         emit(Seq("`endif"))
         emit(Seq("`endif // SYNTHESIS"))
+        if (!emissionOptions.emitMemoryInitAsNoSynth) {
+          for (x <- memoryInitials) emit(Seq(tab, x))
+        }
       }
 
       if (formals.keys.nonEmpty) {

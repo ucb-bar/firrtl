@@ -4,6 +4,7 @@ package firrtl.graph
 
 import scala.collection.{mutable, Map, Set}
 import scala.collection.mutable.{LinkedHashMap, LinkedHashSet}
+import firrtl.options.DependencyManagerUtils.{CharSet, PrettyCharSet}
 
 /** An exception that is raised when an assumed DAG has a cycle */
 class CyclicException(val node: Any) extends Exception(s"No valid linearization for cyclic graph, found at $node")
@@ -30,6 +31,16 @@ object DiGraph {
       }
     }
     new DiGraph(edgeDataCopy)
+  }
+
+  /** Create a DiGraph from edges */
+  def apply[T](edges: (T, T)*): DiGraph[T] = {
+    val edgeMap = new LinkedHashMap[T, LinkedHashSet[T]]
+    for ((from, to) <- edges) {
+      val set = edgeMap.getOrElseUpdate(from, new LinkedHashSet[T])
+      set += to
+    }
+    new DiGraph(edgeMap)
   }
 }
 
@@ -153,7 +164,7 @@ class DiGraph[T](private[graph] val edges: LinkedHashMap[T, LinkedHashSet[T]]) {
     val queue = new mutable.Queue[T]
     queue.enqueue(root)
     while (queue.nonEmpty) {
-      val u = queue.dequeue
+      val u = queue.dequeue()
       for (v <- getEdges(u)) {
         if (!prev.contains(v) && !blacklist.contains(v)) {
           prev(v) = u
@@ -257,7 +268,7 @@ class DiGraph[T](private[graph] val edges: LinkedHashMap[T, LinkedHashSet[T]]) {
         }
         frame.childCall = None
         while (frame.edgeIter.hasNext && frame.childCall.isEmpty) {
-          val w = frame.edgeIter.next
+          val w = frame.edgeIter.next()
           if (!indices.contains(w)) {
             frame.childCall = Some(w)
             callStack.push(new StrongConnectFrame(w, getEdges(w).iterator))
@@ -269,13 +280,13 @@ class DiGraph[T](private[graph] val edges: LinkedHashMap[T, LinkedHashSet[T]]) {
           if (lowlinks(v) == indices(v)) {
             val scc = new mutable.ArrayBuffer[T]
             do {
-              val w = stack.pop
+              val w = stack.pop()
               onstack -= w
               scc += w
             } while (scc.last != v);
             sccs.append(scc.toSeq)
           }
-          callStack.pop
+          callStack.pop()
         }
       }
     }
@@ -305,7 +316,7 @@ class DiGraph[T](private[graph] val edges: LinkedHashMap[T, LinkedHashSet[T]]) {
     queue += start
     queue ++= linearize.filter(reachable.contains(_))
     while (!queue.isEmpty) {
-      val current = queue.dequeue
+      val current = queue.dequeue()
       for (v <- getEdges(current)) {
         for (p <- paths(current)) {
           addBinding(v, p :+ v)
@@ -386,6 +397,41 @@ class DiGraph[T](private[graph] val edges: LinkedHashMap[T, LinkedHashSet[T]]) {
     that.edges.foreach({ case (k, v) => eprime.getOrElseUpdate(k, new LinkedHashSet[T]) ++= v })
     new DiGraph(eprime)
   }
+
+  /** Serializes a `DiGraph[String]` as a pretty tree
+    *
+    * Multiple roots are supported, but cycles are not.
+    */
+  def prettyTree(charSet: CharSet = PrettyCharSet)(implicit ev: T =:= String): String = {
+    // Set up characters for building the tree
+    val (l, n, c) = (charSet.lastNode, charSet.notLastNode, charSet.continuation)
+    val ctab = " " * c.size + " "
+
+    // Recursively adds each node of the DiGraph to accumulating List[String]
+    // Uses List because prepend is cheap and this prevents quadratic behavior of String
+    //   concatenations or even flatMapping on Seqs
+    def rec(tab: String, node: T, mark: String, prev: List[String]): List[String] = {
+      val here = s"$mark$node"
+      val children = this.getEdges(node)
+      val last = children.size - 1
+      children.toList // Convert LinkedHashSet to List to avoid determinism issues
+        .zipWithIndex // Find last
+        .foldLeft(here :: prev) {
+          case (acc, (nodex, idx)) =>
+            val nextTab = if (idx == last) tab + ctab else tab + c + " "
+            val nextMark = if (idx == last) tab + l else tab + n
+            rec(nextTab, nodex, nextMark + " ", acc)
+        }
+    }
+    this.findSources.toList // Convert LinkedHashSet to List to avoid determinism issues
+      .sortBy(_.toString) // Make order deterministic
+      .foldLeft(Nil: List[String]) {
+        case (acc, root) => rec("", root, "", acc)
+      }
+      .reverse
+      .mkString("\n")
+  }
+
 }
 
 class MutableDiGraph[T] extends DiGraph[T](new LinkedHashMap[T, LinkedHashSet[T]]) {

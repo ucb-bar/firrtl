@@ -90,8 +90,6 @@ object WiringUtils {
   def getChildrenMap(c: Circuit): ChildrenMap = {
     val childrenMap = new ChildrenMap()
     def getChildren(mname: String)(s: Statement): Unit = s match {
-      case s: WDefInstance =>
-        childrenMap(mname) = childrenMap(mname) :+ ((s.name, s.module))
       case s: DefInstance =>
         childrenMap(mname) = childrenMap(mname) :+ ((s.name, s.module))
       case s => s.foreach(getChildren(mname))
@@ -152,11 +150,11 @@ object WiringUtils {
       * sources/sinks not under sinks/sources.
       */
     if (queue.size == 1) {
-      val u = queue.dequeue
+      val u = queue.dequeue()
       sinkInsts.foreach { v => owners(v) = Vector(u) }
     } else {
       while (queue.nonEmpty) {
-        val u = queue.dequeue
+        val u = queue.dequeue()
         visited(u) = true
 
         val edges = (i.graph.getEdges(u.last).map(u :+ _).toVector :+ u.dropRight(1))
@@ -224,11 +222,11 @@ object WiringUtils {
       * sources/sinks not under sinks/sources.
       */
     if (queue.size == 1) {
-      val u = queue.dequeue
+      val u = queue.dequeue()
       sinkInsts.foreach { v => owners(v) = Vector(u) }
     } else {
       while (queue.nonEmpty) {
-        val u = queue.dequeue
+        val u = queue.dequeue()
         visited(u) = true
 
         val edges = i.graph.getEdges(u.last).map(u :+ _).toVector :+ u.dropRight(1)

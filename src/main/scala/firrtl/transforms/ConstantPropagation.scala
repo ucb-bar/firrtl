@@ -13,7 +13,8 @@ import firrtl.PrimOps._
 import firrtl.graph.DiGraph
 import firrtl.analyses.InstanceKeyGraph
 import firrtl.annotations.TargetToken.Ref
-import firrtl.options.Dependency
+import firrtl.options.{Dependency, RegisteredTransform, ShellOption}
+import firrtl.stage.DisableFold
 
 import annotation.tailrec
 import collection.mutable
@@ -28,7 +29,17 @@ object ConstantPropagation {
 
   /** Pads e to the width of t */
   def pad(e: Expression, t: Type) = (bitWidth(e.tpe), bitWidth(t)) match {
-    case (we, wt) if we < wt  => DoPrim(Pad, Seq(e), Seq(wt), t)
+    case (we, wt) if we < wt =>
+      DoPrim(
+        Pad,
+        Seq(e),
+        Seq(wt),
+        e.tpe match {
+          case UIntType(_) => UIntType(IntWidth(wt))
+          case SIntType(_) => SIntType(IntWidth(wt))
+          case _           => e.tpe
+        }
+      )
     case (we, wt) if we == wt => e
   }
 
@@ -100,16 +111,15 @@ object ConstantPropagation {
 
 }
 
-class ConstantPropagation extends Transform with DependencyAPIMigration {
+class ConstantPropagation extends Transform with RegisteredTransform with DependencyAPIMigration {
   import ConstantPropagation._
 
   override def prerequisites =
     ((new mutable.LinkedHashSet())
       ++ firrtl.stage.Forms.LowForm
-      - Dependency(firrtl.passes.Legalize)
-      + Dependency(firrtl.passes.RemoveValidIf)).toSeq
+      - Dependency(firrtl.passes.Legalize)).toSeq
 
-  override def optionalPrerequisites = Seq.empty
+  override def optionalPrerequisites = Seq(Dependency(firrtl.passes.RemoveValidIf))
 
   override def optionalPrerequisiteOf =
     Seq(
@@ -123,6 +133,14 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
     case firrtl.passes.Legalize => true
     case _                      => false
   }
+
+  val options = Seq(
+    new ShellOption[Unit](
+      longOption = "no-constant-propagation",
+      toAnnotationSeq = _ => Seq(NoConstantPropagationAnnotation),
+      helpText = "Disable constant propagation elimination"
+    )
+  )
 
   sealed trait SimplifyBinaryOp {
     def matchingArgsValue(e: DoPrim, arg: Expression): Expression
@@ -230,7 +248,7 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
     }
     def simplify(e: Expression, lhs: Literal, rhs: Expression) = lhs match {
       case UIntLiteral(v, _) if v == BigInt(0)                                            => rhs
-      case SIntLiteral(v, _) if v == BigInt(0)                                            => asUInt(rhs, e.tpe)
+      case SIntLiteral(v, _) if v == BigInt(0)                                            => asUInt(pad(rhs, e.tpe), e.tpe)
       case UIntLiteral(v, IntWidth(w)) if v == (BigInt(1) << bitWidth(rhs.tpe).toInt) - 1 => lhs
       case _                                                                              => e
     }
@@ -244,7 +262,7 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
     }
     def simplify(e: Expression, lhs: Literal, rhs: Expression) = lhs match {
       case UIntLiteral(v, _) if v == BigInt(0) => rhs
-      case SIntLiteral(v, _) if v == BigInt(0) => asUInt(rhs, e.tpe)
+      case SIntLiteral(v, _) if v == BigInt(0) => asUInt(pad(rhs, e.tpe), e.tpe)
       case _                                   => e
     }
     def matchingArgsValue(e: DoPrim, arg: Expression) = UIntLiteral(0, getWidth(arg.tpe))
@@ -401,7 +419,8 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
     override def reduce = (a: Boolean, b: Boolean) => a ^ b
   }
 
-  private def constPropPrim(e: DoPrim): Expression = e.op match {
+  private def constPropPrim(e: DoPrim, disabledOps: Set[PrimOp]): Expression = e.op match {
+    case a if disabledOps(a)   => e
     case Shl                   => foldShiftLeft(e)
     case Dshl                  => foldDynamicShiftLeft(e)
     case Shr                   => foldShiftRight(e)
@@ -495,19 +514,25 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
   private def betterName(a: String, b: String): Boolean = (a.head != '_') && (b.head == '_')
 
   def optimize(e: Expression): Expression =
-    constPropExpression(new NodeMap(), Map.empty[Instance, OfModule], Map.empty[OfModule, Map[String, Literal]])(e)
+    constPropExpression(
+      new NodeMap(),
+      Map.empty[Instance, OfModule],
+      Map.empty[OfModule, Map[String, Literal]],
+      Set.empty
+    )(e)
   def optimize(e: Expression, nodeMap: NodeMap): Expression =
-    constPropExpression(nodeMap, Map.empty[Instance, OfModule], Map.empty[OfModule, Map[String, Literal]])(e)
+    constPropExpression(nodeMap, Map.empty[Instance, OfModule], Map.empty[OfModule, Map[String, Literal]], Set.empty)(e)
 
   private def constPropExpression(
     nodeMap:         NodeMap,
     instMap:         collection.Map[Instance, OfModule],
-    constSubOutputs: Map[OfModule, Map[String, Literal]]
+    constSubOutputs: Map[OfModule, Map[String, Literal]],
+    disabledOps:     Set[PrimOp]
   )(e:               Expression
   ): Expression = {
-    val old = e.map(constPropExpression(nodeMap, instMap, constSubOutputs))
+    val old = e.map(constPropExpression(nodeMap, instMap, constSubOutputs, disabledOps))
     val propagated = old match {
-      case p: DoPrim => constPropPrim(p)
+      case p: DoPrim => constPropPrim(p, disabledOps)
       case m: Mux    => constPropMux(m)
       case ref @ WRef(rname, _, _, SourceFlow) if nodeMap.contains(rname) =>
         constPropNodeRef(ref, InfoExpr.unwrap(nodeMap(rname))._2)
@@ -519,7 +544,7 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
     }
     // We're done when the Expression no longer changes
     if (propagated eq old) propagated
-    else constPropExpression(nodeMap, instMap, constSubOutputs)(propagated)
+    else constPropExpression(nodeMap, instMap, constSubOutputs, disabledOps)(propagated)
   }
 
   /** Hacky way of propagating source locators across nodes and connections that have just a
@@ -555,6 +580,7 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
    * @param instMap map of instance names to Module name
    * @param constInputs map of names of m's input ports to literal driving it (if applicable)
    * @param constSubOutputs Map of Module name to Map of output port name to literal driving it
+   * @param disabledOps a Set of any PrimOps that should not be folded
    * @return (Constpropped Module, Map of output port names to literal value,
    *   Map of submodule modulenames to Map of input port names to literal values)
    */
@@ -564,7 +590,8 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
     dontTouches:     Set[String],
     instMap:         collection.Map[Instance, OfModule],
     constInputs:     Map[String, Literal],
-    constSubOutputs: Map[OfModule, Map[String, Literal]]
+    constSubOutputs: Map[OfModule, Map[String, Literal]],
+    disabledOps:     Set[PrimOp]
   ): (Module, Map[String, Literal], Map[OfModule, Map[String, Seq[Literal]]]) = {
 
     var nPropagated = 0L
@@ -637,7 +664,8 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
         case WRef(rname, _, kind, _) if betterName(lname, rname) && !swapMap.contains(rname) && kind != PortKind =>
           assert(!swapMap.contains(lname)) // <- Shouldn't be possible because lname is either a
           // node declaration or the single connection to a wire or register
-          swapMap += (lname -> rname, rname -> lname)
+          swapMap += lname -> rname
+          swapMap += rname -> lname
         case _ =>
       }
       nodeMap(lname) = InfoExpr.wrap(info, value)
@@ -646,7 +674,8 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
     def constPropStmt(s: Statement): Statement = {
       val s0 = s.map(constPropStmt) // Statement recurse
       val s1 = propagateDirectConnectionInfoOnly(nodeMap, dontTouches)(s0) // hacky source locator propagation
-      val stmtx = s1.map(constPropExpression(nodeMap, instMap, constSubOutputs)) // propagate sub-Expressions
+      // propagate sub-Expressions
+      val stmtx = s1.map(constPropExpression(nodeMap, instMap, constSubOutputs, disabledOps))
       // Record things that should be propagated
       stmtx match {
         case DefNode(info, name, value) if !dontTouches.contains(name) =>
@@ -654,11 +683,12 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
         case reg: DefRegister if reg.reset.tpe == AsyncResetType =>
           asyncResetRegs(reg.name) = reg
         case Connect(info, WRef(wname, wtpe, WireKind, _), expr: Literal) if !dontTouches.contains(wname) =>
-          val exprx = constPropExpression(nodeMap, instMap, constSubOutputs)(pad(expr, wtpe))
+          val exprx = constPropExpression(nodeMap, instMap, constSubOutputs, disabledOps)(pad(expr, wtpe))
           propagateRef(wname, exprx, info)
         // Record constants driving outputs
         case Connect(_, WRef(pname, ptpe, PortKind, _), lit: Literal) if !dontTouches.contains(pname) =>
-          val paddedLit = constPropExpression(nodeMap, instMap, constSubOutputs)(pad(lit, ptpe)).asInstanceOf[Literal]
+          val paddedLit =
+            constPropExpression(nodeMap, instMap, constSubOutputs, disabledOps)(pad(lit, ptpe)).asInstanceOf[Literal]
           constOutputs(pname) = paddedLit
         // Const prop registers that are driven by a mux tree containing only instances of one constant or self-assigns
         // This requires that reset has been made explicit
@@ -714,7 +744,8 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
             case _                                                =>
           }
 
-          def padCPExp(e: Expression) = constPropExpression(nodeMap, instMap, constSubOutputs)(pad(e, ltpe))
+          def padCPExp(e: Expression) =
+            constPropExpression(nodeMap, instMap, constSubOutputs, disabledOps)(pad(e, ltpe))
 
           asyncResetRegs.get(lname) match {
             // Normal Register
@@ -725,7 +756,8 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
 
         // Mark instance inputs connected to a constant
         case Connect(_, lref @ WSubField(WRef(inst, _, InstanceKind, _), port, ptpe, _), lit: Literal) =>
-          val paddedLit = constPropExpression(nodeMap, instMap, constSubOutputs)(pad(lit, ptpe)).asInstanceOf[Literal]
+          val paddedLit =
+            constPropExpression(nodeMap, instMap, constSubOutputs, disabledOps)(pad(lit, ptpe)).asInstanceOf[Literal]
           val module = instMap(inst.Instance)
           val portsMap = constSubInputs.getOrElseUpdate(module, mutable.HashMap.empty)
           portsMap(port) = paddedLit +: portsMap.getOrElse(port, List.empty)
@@ -750,7 +782,7 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
 
     // When we call this function again, constOutputs and constSubInputs are reconstructed and
     // strictly a superset of the versions here
-    if (nPropagated > 0) constPropModule(modx, dontTouches, instMap, constInputs, constSubOutputs)
+    if (nPropagated > 0) constPropModule(modx, dontTouches, instMap, constInputs, constSubOutputs, disabledOps)
     else (modx, constOutputs.toMap, constSubInputs.mapValues(_.toMap).toMap)
   }
 
@@ -761,7 +793,7 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
         acc + (k -> acc.get(k).map(f(_, v)).getOrElse(v))
     }
 
-  private def run(c: Circuit, dontTouchMap: Map[OfModule, Set[String]]): Circuit = {
+  private def run(c: Circuit, dontTouchMap: Map[OfModule, Set[String]], disabledOps: Set[PrimOp]): Circuit = {
     val iGraph = InstanceKeyGraph(c)
     val moduleDeps = iGraph.getChildInstanceMap
     val instCount = iGraph.staticInstanceCount
@@ -800,7 +832,8 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
                 dontTouches,
                 moduleDeps(mname),
                 constInputs.getOrElse(mname, Map.empty),
-                constOutputs
+                constOutputs,
+                disabledOps
               )
               // Accumulate all Literals used to drive a particular Module port
               val constInputsx = unify(constInputsAcc, mci)((a, b) => unify(a, b)((c, d) => c ++ d))
@@ -852,6 +885,13 @@ class ConstantPropagation extends Transform with DependencyAPIMigration {
     val dontTouchMap: Map[OfModule, Set[String]] =
       dontTouches.groupBy(_._1).mapValues(_.map(_._2).toSet).toMap
 
-    state.copy(circuit = run(state.circuit, dontTouchMap))
+    val disabledOps = state.annotations.collect { case DisableFold(op) => op }.toSet
+
+    if (state.annotations.contains(NoConstantPropagationAnnotation)) {
+      logger.info("Skipping Constant Propagation")
+      state
+    } else {
+      state.copy(circuit = run(state.circuit, dontTouchMap, disabledOps))
+    }
   }
 }

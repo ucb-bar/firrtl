@@ -31,7 +31,11 @@ class ChirrtlToHighFirrtl extends CoreTransform {
 class IRToWorkingIR extends CoreTransform {
   def inputForm = HighForm
   def outputForm = HighForm
-  def transforms = new TransformManager(Forms.WorkingIR, Forms.MinimalHighForm).flattenedTransformOrder
+  def transforms = Seq(
+    new Transform with firrtl.options.IdentityLike[CircuitState] with DependencyAPIMigration {
+      override def execute(a: CircuitState) = transform(a)
+    }
+  )
 }
 
 /** Resolves types, kinds, and flows, and checks the circuit legality.
@@ -44,7 +48,7 @@ class IRToWorkingIR extends CoreTransform {
 class ResolveAndCheck extends CoreTransform {
   def inputForm = HighForm
   def outputForm = HighForm
-  def transforms = new TransformManager(Forms.Resolved, Forms.WorkingIR).flattenedTransformOrder
+  def transforms = new TransformManager(Forms.Resolved, Forms.MinimalHighForm).flattenedTransformOrder
 }
 
 /** Expands aggregate connects, removes dynamic accesses, and when
@@ -123,7 +127,7 @@ class NoneCompiler extends Compiler {
 )
 class HighFirrtlCompiler extends Compiler {
   val emitter = new HighFirrtlEmitter
-  def transforms: Seq[Transform] = Forms.HighForm.map(_.getObject)
+  def transforms: Seq[Transform] = Forms.HighForm.map(_.getObject())
 }
 
 /** Emits middle Firrtl input circuit */
@@ -133,7 +137,7 @@ class HighFirrtlCompiler extends Compiler {
 )
 class MiddleFirrtlCompiler extends Compiler {
   val emitter = new MiddleFirrtlEmitter
-  def transforms: Seq[Transform] = Forms.MidForm.map(_.getObject)
+  def transforms: Seq[Transform] = Forms.MidForm.map(_.getObject())
 }
 
 /** Emits lowered input circuit */
@@ -143,7 +147,7 @@ class MiddleFirrtlCompiler extends Compiler {
 )
 class LowFirrtlCompiler extends Compiler {
   val emitter = new LowFirrtlEmitter
-  def transforms: Seq[Transform] = Forms.LowForm.map(_.getObject)
+  def transforms: Seq[Transform] = Forms.LowForm.map(_.getObject())
 }
 
 /** Emits Verilog */
@@ -153,7 +157,7 @@ class LowFirrtlCompiler extends Compiler {
 )
 class VerilogCompiler extends Compiler {
   val emitter = new VerilogEmitter
-  def transforms: Seq[Transform] = Forms.LowFormOptimized.map(_.getObject)
+  def transforms: Seq[Transform] = Forms.LowFormOptimized.map(_.getObject())
 }
 
 /** Emits Verilog without optimizations */
@@ -163,7 +167,7 @@ class VerilogCompiler extends Compiler {
 )
 class MinimumVerilogCompiler extends Compiler {
   val emitter = new MinimumVerilogEmitter
-  def transforms: Seq[Transform] = Forms.LowFormMinimumOptimized.map(_.getObject)
+  def transforms: Seq[Transform] = Forms.LowFormMinimumOptimized.map(_.getObject())
 }
 
 /** Currently just an alias for the [[VerilogCompiler]] */

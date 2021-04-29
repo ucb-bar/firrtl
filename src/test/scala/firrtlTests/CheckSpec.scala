@@ -86,6 +86,106 @@ class CheckSpec extends AnyFlatSpec with Matchers {
     }
   }
 
+  behavior.of("Check Types")
+
+  def runCheckTypes(input: String) = {
+    val passes = List(InferTypes, CheckTypes)
+    val wrapped = "circuit test:\n  module test:\n    " + input.replaceAll("\n", "\n    ")
+    passes.foldLeft(Parser.parse(wrapped)) { case (c, p) => p.run(c) }
+  }
+
+  it should "disallow mux enable conditions that are not 1-bit UInts (or unknown width)" in {
+    def mk(tpe: String) =
+      s"""|input en : $tpe
+          |input foo : UInt<8>
+          |input bar : UInt<8>
+          |node x = mux(en, foo, bar)""".stripMargin
+    a[CheckTypes.MuxCondUInt] shouldBe thrownBy { runCheckTypes(mk("SInt<1>")) }
+    a[CheckTypes.MuxCondUInt] shouldBe thrownBy { runCheckTypes(mk("SInt")) }
+    a[CheckTypes.MuxCondUInt] shouldBe thrownBy { runCheckTypes(mk("UInt<3>")) }
+    a[CheckTypes.MuxCondUInt] shouldBe thrownBy { runCheckTypes(mk("Clock")) }
+    a[CheckTypes.MuxCondUInt] shouldBe thrownBy { runCheckTypes(mk("AsyncReset")) }
+    runCheckTypes(mk("UInt"))
+    runCheckTypes(mk("UInt<1>"))
+  }
+
+  it should "disallow when predicates that are not 1-bit UInts (or unknown width)" in {
+    def mk(tpe: String) =
+      s"""|input en : $tpe
+          |input foo : UInt<8>
+          |input bar : UInt<8>
+          |output out : UInt<8>
+          |when en :
+          |  out <= foo
+          |else:
+          |  out <= bar""".stripMargin
+    a[CheckTypes.PredNotUInt] shouldBe thrownBy { runCheckTypes(mk("SInt<1>")) }
+    a[CheckTypes.PredNotUInt] shouldBe thrownBy { runCheckTypes(mk("SInt")) }
+    a[CheckTypes.PredNotUInt] shouldBe thrownBy { runCheckTypes(mk("UInt<3>")) }
+    a[CheckTypes.PredNotUInt] shouldBe thrownBy { runCheckTypes(mk("Clock")) }
+    a[CheckTypes.PredNotUInt] shouldBe thrownBy { runCheckTypes(mk("AsyncReset")) }
+    runCheckTypes(mk("UInt"))
+    runCheckTypes(mk("UInt<1>"))
+  }
+
+  it should "disallow print enables that are not 1-bit UInts (or unknown width)" in {
+    def mk(tpe: String) =
+      s"""|input en : $tpe
+          |input clock : Clock
+          |printf(clock, en, "Hello World!\\n")""".stripMargin
+    a[CheckTypes.EnNotUInt] shouldBe thrownBy { runCheckTypes(mk("SInt<1>")) }
+    a[CheckTypes.EnNotUInt] shouldBe thrownBy { runCheckTypes(mk("SInt")) }
+    a[CheckTypes.EnNotUInt] shouldBe thrownBy { runCheckTypes(mk("UInt<3>")) }
+    a[CheckTypes.EnNotUInt] shouldBe thrownBy { runCheckTypes(mk("Clock")) }
+    a[CheckTypes.EnNotUInt] shouldBe thrownBy { runCheckTypes(mk("AsyncReset")) }
+    runCheckTypes(mk("UInt"))
+    runCheckTypes(mk("UInt<1>"))
+  }
+
+  it should "disallow stop enables that are not 1-bit UInts (or unknown width)" in {
+    def mk(tpe: String) =
+      s"""|input en : $tpe
+          |input clock : Clock
+          |stop(clock, en, 0)""".stripMargin
+    a[CheckTypes.EnNotUInt] shouldBe thrownBy { runCheckTypes(mk("SInt<1>")) }
+    a[CheckTypes.EnNotUInt] shouldBe thrownBy { runCheckTypes(mk("SInt")) }
+    a[CheckTypes.EnNotUInt] shouldBe thrownBy { runCheckTypes(mk("UInt<3>")) }
+    a[CheckTypes.EnNotUInt] shouldBe thrownBy { runCheckTypes(mk("Clock")) }
+    a[CheckTypes.EnNotUInt] shouldBe thrownBy { runCheckTypes(mk("AsyncReset")) }
+    runCheckTypes(mk("UInt"))
+    runCheckTypes(mk("UInt<1>"))
+  }
+
+  it should "disallow verif node predicates that are not 1-bit UInts (or unknown width)" in {
+    def mk(tpe: String) =
+      s"""|input en : $tpe
+          |input cond : UInt<1>
+          |input clock : Clock
+          |assert(clock, en, cond, "Howdy!")""".stripMargin
+    a[CheckTypes.PredNotUInt] shouldBe thrownBy { runCheckTypes(mk("SInt<1>")) }
+    a[CheckTypes.PredNotUInt] shouldBe thrownBy { runCheckTypes(mk("SInt")) }
+    a[CheckTypes.PredNotUInt] shouldBe thrownBy { runCheckTypes(mk("UInt<3>")) }
+    a[CheckTypes.PredNotUInt] shouldBe thrownBy { runCheckTypes(mk("Clock")) }
+    a[CheckTypes.PredNotUInt] shouldBe thrownBy { runCheckTypes(mk("AsyncReset")) }
+    runCheckTypes(mk("UInt"))
+    runCheckTypes(mk("UInt<1>"))
+  }
+
+  it should "disallow verif node enables that are not 1-bit UInts (or unknown width)" in {
+    def mk(tpe: String) =
+      s"""|input en : UInt<1>
+          |input cond : $tpe
+          |input clock : Clock
+          |assert(clock, en, cond, "Howdy!")""".stripMargin
+    a[CheckTypes.EnNotUInt] shouldBe thrownBy { runCheckTypes(mk("SInt<1>")) }
+    a[CheckTypes.EnNotUInt] shouldBe thrownBy { runCheckTypes(mk("SInt")) }
+    a[CheckTypes.EnNotUInt] shouldBe thrownBy { runCheckTypes(mk("UInt<3>")) }
+    a[CheckTypes.EnNotUInt] shouldBe thrownBy { runCheckTypes(mk("Clock")) }
+    a[CheckTypes.EnNotUInt] shouldBe thrownBy { runCheckTypes(mk("AsyncReset")) }
+    runCheckTypes(mk("UInt"))
+    runCheckTypes(mk("UInt<1>"))
+  }
+
   "Instance loops a -> b -> a" should "be detected" in {
     val input =
       """
@@ -384,6 +484,36 @@ class CheckSpec extends AnyFlatSpec with Matchers {
     }
   }
 
+  "Attempting to shadow a statement name" should "throw an error" in {
+    val input =
+      s"""|circuit scopes:
+          |  module scopes:
+          |    input c: Clock
+          |    input i: UInt<1>
+          |    output o: UInt<1>
+          |    wire x: UInt<1>
+          |    when i:
+          |      stop(c, UInt(1), 1) : x
+          |    o <= and(x, i)
+          |""".stripMargin
+    assertThrows[CheckHighForm.NotUniqueException] {
+      checkHighInput(input)
+    }
+  }
+
+  "Colliding statement names" should "throw an error" in {
+    val input =
+      s"""|circuit test:
+          |  module test:
+          |    input c: Clock
+          |    stop(c, UInt(1), 1) : x
+          |    stop(c, UInt(1), 1) : x
+          |""".stripMargin
+    assertThrows[CheckHighForm.NotUniqueException] {
+      checkHighInput(input)
+    }
+  }
+
   "Conditionally statements" should "create separate consequent and alternate scopes" in {
     val input =
       s"""|circuit scopes:
@@ -533,6 +663,20 @@ class CheckSpec extends AnyFlatSpec with Matchers {
       } catch {
         case e: firrtl.passes.PassExceptions => throw e.exceptions.head
       }
+    }
+  }
+
+  it should "throw an exception if a statement name is used as a reference" in {
+    val src = """
+                |circuit test:
+                |  module test:
+                |    input clock: Clock
+                |    output a: UInt<2>
+                |    stop(clock, UInt(1), 1) : hello
+                |    a <= hello
+                |""".stripMargin
+    assertThrows[CheckHighForm.UndeclaredReferenceException] {
+      checkHighInput(src)
     }
   }
 

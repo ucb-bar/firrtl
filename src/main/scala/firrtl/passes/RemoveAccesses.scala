@@ -47,8 +47,7 @@ object RemoveAccesses extends Pass {
     *   Seq(Location(a[0], UIntLiteral(0)), Location(a[1], UIntLiteral(1)))
     */
   private def getLocations(e: Expression): Seq[Location] = e match {
-    case e: WRef => create_exps(e).map(Location(_, one))
-    case e: WSubIndex =>
+    case e: SubIndex =>
       val ls = getLocations(e.expr)
       val start = get_point(e)
       val end = start + get_size(e.tpe)
@@ -57,7 +56,7 @@ object RemoveAccesses extends Pass {
         (l, i) <- ls.zipWithIndex
         if ((i % stride) >= start) & ((i % stride) < end)
       ) yield l
-    case e: WSubField =>
+    case e: SubField =>
       val ls = getLocations(e.expr)
       val start = get_point(e)
       val end = start + get_size(e.tpe)
@@ -66,17 +65,27 @@ object RemoveAccesses extends Pass {
         (l, i) <- ls.zipWithIndex
         if ((i % stride) >= start) & ((i % stride) < end)
       ) yield l
-    case e: WSubAccess =>
-      val ls = getLocations(e.expr)
-      val stride = get_size(e.tpe)
-      val wrap = e.expr.tpe.asInstanceOf[VectorType].size
-      ls.zipWithIndex.map {
-        case (l, i) =>
-          val c = (i / stride) % wrap
-          val basex = l.base
-          val guardx = AND(l.guard, EQV(UIntLiteral(c), e.index))
-          Location(basex, guardx)
+    case SubAccess(expr, index, tpe, _) =>
+      getLocations(expr).zipWithIndex.flatMap {
+        case (Location(exprBase, exprGuard), exprIndex) =>
+          getLocations(index).map {
+            case Location(indexBase, indexGuard) =>
+              Location(
+                exprBase,
+                AND(
+                  AND(
+                    indexGuard,
+                    exprGuard
+                  ),
+                  EQV(
+                    UIntLiteral((exprIndex / get_size(tpe)) % expr.tpe.asInstanceOf[VectorType].size),
+                    indexBase
+                  )
+                )
+              )
+          }
       }
+    case e => create_exps(e).map(Location(_, one))
   }
 
   /** Returns true if e contains a [[firrtl.WSubAccess]]
@@ -111,26 +120,26 @@ object RemoveAccesses extends Pass {
         /** Replaces a subaccess in a given source expression
           */
         val stmts = mutable.ArrayBuffer[Statement]()
-        def removeSource(e: Expression): Expression = e match {
-          case (_: WSubAccess | _: WSubField | _: WSubIndex | _: WRef) if hasAccess(e) =>
-            val rs = getLocations(e)
-            rs.find(x => x.guard != one) match {
-              case None => throwInternalError(s"removeSource: shouldn't be here - $e")
-              case Some(_) =>
-                val (wire, temp) = create_temp(e)
-                val temps = create_exps(temp)
-                def getTemp(i: Int) = temps(i % temps.size)
-                stmts += wire
-                rs.zipWithIndex.foreach {
-                  case (x, i) if i < temps.size =>
-                    stmts += IsInvalid(get_info(s), getTemp(i))
-                    stmts += Conditionally(get_info(s), x.guard, Connect(get_info(s), getTemp(i), x.base), EmptyStmt)
-                  case (x, i) =>
-                    stmts += Conditionally(get_info(s), x.guard, Connect(get_info(s), getTemp(i), x.base), EmptyStmt)
-                }
-                temp
-            }
-          case _ => e
+        // Only called on RefLikes that definitely have a SubAccess
+        // Must accept Expression because that's the output type of fixIndices
+        def removeSource(e: Expression): Expression = {
+          val rs = getLocations(e)
+          rs.find(x => x.guard != one) match {
+            case None => throwInternalError(s"removeSource: shouldn't be here - $e")
+            case Some(_) =>
+              val (wire, temp) = create_temp(e)
+              val temps = create_exps(temp)
+              def getTemp(i: Int) = temps(i % temps.size)
+              stmts += wire
+              rs.zipWithIndex.foreach {
+                case (x, i) if i < temps.size =>
+                  stmts += IsInvalid(get_info(s), getTemp(i))
+                  stmts += Conditionally(get_info(s), x.guard, Connect(get_info(s), getTemp(i), x.base), EmptyStmt)
+                case (x, i) =>
+                  stmts += Conditionally(get_info(s), x.guard, Connect(get_info(s), getTemp(i), x.base), EmptyStmt)
+              }
+              temp
+          }
         }
 
         /** Replaces a subaccess in a given sink expression
@@ -151,14 +160,23 @@ object RemoveAccesses extends Pass {
           case _ => loc
         }
 
+        /** Recurse until find SubAccess and call fixSource on its index
+          * @note this only accepts [[RefLikeExpression]]s but we can't enforce it because map
+          *       requires Expression => Expression
+          */
+        def fixIndices(e: Expression): Expression = e match {
+          case e: SubAccess => e.copy(index = fixSource(e.index))
+          case other => other.map(fixIndices)
+        }
+
         /** Recursively walks a source expression and fixes all subaccesses
-          * If we see a sub-access, replace it.
-          * Otherwise, map to children.
+          *
+          * If we see a RefLikeExpression that contains a SubAccess, we recursively remove
+          * subaccesses from the indices of any SubAccesses, then process modified RefLikeExpression
           */
         def fixSource(e: Expression): Expression = e match {
-          case w: WSubAccess => removeSource(WSubAccess(w.expr, fixSource(w.index), w.tpe, w.flow))
-          //case w: WSubIndex => removeSource(w)
-          //case w: WSubField => removeSource(w)
+          case ref: RefLikeExpression =>
+            if (hasAccess(ref)) removeSource(fixIndices(ref)) else ref
           case x => x.map(fixSource)
         }
 

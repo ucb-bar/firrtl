@@ -155,7 +155,10 @@ class LoweringCompilersSpec extends AnyFlatSpec with Matchers {
 
   it should "replicate the old order" in {
     val tm = new TransformManager(Forms.WorkingIR, Forms.MinimalHighForm)
-    compare(legacyTransforms(new firrtl.IRToWorkingIR), tm)
+    val patches = Seq(
+      Del(1)
+    )
+    compare(legacyTransforms(new firrtl.IRToWorkingIR), tm, patches)
   }
 
   behavior.of("ResolveAndCheck")
@@ -244,7 +247,7 @@ class LoweringCompilersSpec extends AnyFlatSpec with Matchers {
       new firrtl.transforms.ReplaceTruncatingArithmetic,
       new firrtl.transforms.InlineBitExtractionsTransform,
       new firrtl.transforms.PropagatePresetAnnotations,
-      new firrtl.transforms.InlineCastsTransform,
+      new firrtl.transforms.InlineAcrossCastsTransform,
       new firrtl.transforms.LegalizeClocksTransform,
       new firrtl.transforms.FlattenRegUpdate,
       firrtl.passes.VerilogModulusCleanup,
@@ -268,7 +271,7 @@ class LoweringCompilersSpec extends AnyFlatSpec with Matchers {
       new firrtl.transforms.ReplaceTruncatingArithmetic,
       new firrtl.transforms.InlineBitExtractionsTransform,
       new firrtl.transforms.PropagatePresetAnnotations,
-      new firrtl.transforms.InlineCastsTransform,
+      new firrtl.transforms.InlineAcrossCastsTransform,
       new firrtl.transforms.LegalizeClocksTransform,
       new firrtl.transforms.FlattenRegUpdate,
       new firrtl.transforms.DeadCodeElimination,

@@ -116,6 +116,14 @@ sealed abstract class CircuitForm(private val value: Int) extends Ordered[Circui
   /** Defines a suffix to use if this form is written to a file */
   def outputSuffix: String
 }
+private[firrtl] object CircuitForm {
+  // Private internal utils to reduce number of deprecation warnings
+  val ChirrtlForm = firrtl.ChirrtlForm
+  val HighForm = firrtl.HighForm
+  val MidForm = firrtl.MidForm
+  val LowForm = firrtl.LowForm
+  val UnknownForm = firrtl.UnknownForm
+}
 
 // These magic numbers give an ordering to CircuitForm
 /** Chirrtl Form
@@ -202,22 +210,9 @@ final case object UnknownForm extends CircuitForm(-1) {
 // Internal utilities to keep code DRY, not a clean interface
 private[firrtl] object Transform {
 
-  // Run transform with logging
-  def runTransform(name: String, mk: => CircuitState, logger: Logger): CircuitState = {
-    logger.info(s"======== Starting Transform $name ========")
-
-    val (timeMillis, result) = Utils.time(mk)
-
-    logger.info(s"""----------------------------${"-" * name.size}---------\n""")
-    logger.info(f"Time: $timeMillis%.1f ms")
-
-    result
-  }
-
   def remapAnnotations(name: String, before: CircuitState, after: CircuitState, logger: Logger): CircuitState = {
     val remappedAnnotations = propagateAnnotations(name, logger, before.annotations, after.annotations, after.renames)
 
-    logger.info(s"Form: ${after.form}")
     logger.trace(s"Annotations:")
     logger.trace {
       JsonProtocol
@@ -232,7 +227,6 @@ private[firrtl] object Transform {
     }
 
     logger.trace(s"Circuit:\n${after.circuit.serialize}")
-    logger.info(s"======== Finished Transform $name ========\n")
 
     CircuitState(after.circuit, after.form, remappedAnnotations, None)
   }
@@ -310,7 +304,7 @@ trait Transform extends TransformLike[CircuitState] with DependencyAPI[Transform
 
   def transform(state: CircuitState): CircuitState = execute(state)
 
-  import firrtl.{ChirrtlForm => C, HighForm => H, MidForm => M, LowForm => L, UnknownForm => U}
+  import firrtl.CircuitForm.{ChirrtlForm => C, HighForm => H, MidForm => M, LowForm => L, UnknownForm => U}
 
   override def prerequisites: Seq[Dependency[Transform]] = inputForm match {
     case C => Nil
@@ -377,7 +371,7 @@ trait Transform extends TransformLike[CircuitState] with DependencyAPI[Transform
     * @return A transformed Firrtl AST
     */
   final def runTransform(state: CircuitState): CircuitState = {
-    val result = Transform.runTransform(name, execute(prepare(state)), logger)
+    val result = execute(prepare(state))
     Transform.remapAnnotations(name, state, result, logger)
   }
 

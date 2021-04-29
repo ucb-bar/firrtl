@@ -45,7 +45,7 @@ class InstanceGraph(c: Circuit) {
     val topInstance = DefInstance(subTop, subTop)
     instanceQueue.enqueue(topInstance)
     while (instanceQueue.nonEmpty) {
-      val current = instanceQueue.dequeue
+      val current = instanceQueue.dequeue()
       instanceGraph.addVertex(current)
       for (child <- childInstances(current.module)) {
         if (!instanceGraph.contains(child)) {
@@ -185,7 +185,6 @@ object InstanceGraph {
   @deprecated("Use InstanceKeyGraph.collectInstances instead.", "FIRRTL 1.4")
   def collectInstances(insts: mutable.Set[DefInstance])(s: Statement): Unit = s match {
     case i: DefInstance           => insts += i
-    case i: DefInstance           => throwInternalError("Expecting DefInstance, found a DefInstance!")
     case i: WDefInstanceConnector => throwInternalError("Expecting DefInstance, found a DefInstanceConnector!")
     case _ => s.foreach(collectInstances(insts))
   }

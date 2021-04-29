@@ -4,6 +4,7 @@ package firrtl.testutils
 
 import java.io._
 import java.security.Permission
+import scala.sys.process._
 
 import logger.{LazyLogging, LogLevel, LogLevelAnnotation}
 
@@ -122,12 +123,73 @@ trait FirrtlRunners extends BackendCompilationUtilities {
     assert(BackendCompilationUtilities.yosysExpectSuccess(customName, refName, testDir, timesteps))
   }
 
+  /** Check equivalence of Firrtl with reference Verilog
+    *
+    * @note the name of the reference Verilog module is grabbed via regex
+    * @param inputFirrtl string containing Firrtl source
+    * @param referenceVerilog Verilog that will be used as reference for LEC
+    * @param timesteps the maximum number of timesteps to consider
+    */
+  def firrtlEquivalenceWithVerilog(
+    inputFirrtl:      String,
+    referenceVerilog: String,
+    timesteps:        Int = 1
+  ): Unit = {
+    val VerilogModule = """(?s).*module\s(\w+).*""".r
+    val refName = referenceVerilog match {
+      case VerilogModule(name) => name
+      case _                   => throw new Exception(s"Reference Verilog must match simple regex! $VerilogModule")
+    }
+    val circuit = Parser.parse(inputFirrtl.split("\n").toIterator)
+    val inputName = circuit.main
+    require(refName != inputName, s"Name of reference Verilog must not match name of input FIRRTL: $refName")
+
+    val testDir = createTestDirectory(inputName + "_equivalence_test")
+
+    val annos = List(
+      TargetDirAnnotation(testDir.toString),
+      InfoModeAnnotation("ignore"),
+      stage.FirrtlCircuitAnnotation(circuit),
+      stage.RunFirrtlTransformAnnotation.stringToEmitter("verilog"),
+      stage.OutputFileAnnotation(inputName)
+    )
+
+    (new firrtl.stage.FirrtlStage).execute(Array(), annos)
+
+    // Write reference
+    val w = new FileWriter(new File(testDir, s"$refName.v"))
+    w.write(referenceVerilog)
+    w.close()
+
+    assert(BackendCompilationUtilities.yosysExpectSuccess(inputName, refName, testDir, timesteps))
+  }
+
   /** Compiles input Firrtl to Verilog */
   def compileToVerilog(input: String, annotations: AnnotationSeq = Seq.empty): String = {
+    compileToVerilogCircuitState(input, annotations).getEmittedCircuit.value
+  }
+
+  /** Compiles input Firrtl to Verilog */
+  def compileToVerilogCircuitState(input: String, annotations: AnnotationSeq = Seq.empty): CircuitState = {
     val circuit = Parser.parse(input.split("\n").toIterator)
     val compiler = new VerilogCompiler
-    val res = compiler.compileAndEmit(CircuitState(circuit, HighForm, annotations), extraCheckTransforms)
-    res.getEmittedCircuit.value
+    compiler.compileAndEmit(CircuitState(circuit, HighForm, annotations), extraCheckTransforms)
+  }
+
+  /** Run Verilator lint on some Verilog text
+    *
+    * @param inputVerilog Verilog to pass to `verilator --lint-only`
+    * @return Verilator return 0
+    */
+  def lintVerilog(inputVerilog: String): Unit = {
+    val testDir = createTestDirectory(s"${this.getClass.getSimpleName}_lint")
+    val filename = new File(testDir, "test.v")
+    val w = new FileWriter(filename)
+    w.write(inputVerilog)
+    w.close()
+
+    val cmd = Seq("verilator", "--lint-only", filename.toString)
+    assert(cmd.!(loggingProcessLogger) == 0, "Lint must pass")
   }
 
   /** Compile a Firrtl file
@@ -367,6 +429,14 @@ abstract class ExecutionTest(
     runFirrtlTest(name, dir, vFiles, annotations = annotations)
   }
 }
+
+/** Super class for execution driven Firrtl tests compiled without optimizations */
+abstract class ExecutionTestNoOpt(
+  name:        String,
+  dir:         String,
+  vFiles:      Seq[String] = Seq.empty,
+  annotations: AnnotationSeq = Seq.empty)
+    extends ExecutionTest(name, dir, vFiles, RunFirrtlTransformAnnotation(new MinimumVerilogEmitter) +: annotations)
 
 /** Super class for compilation driven Firrtl tests */
 abstract class CompilationTest(name: String, dir: String) extends FirrtlPropSpec {
