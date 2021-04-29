@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package firrtl.passes
 
 import firrtl.DependencyAPIMigration
@@ -8,7 +10,7 @@ import firrtl.{CircuitState, FirrtlUserException, Transform}
   * Has an [[UnknownForm]], because larger [[Transform]] should specify form
   */
 trait Pass extends Transform with DependencyAPIMigration {
-  def run(c: Circuit): Circuit
+  def run(c:         Circuit): Circuit
   def execute(state: CircuitState): CircuitState = state.copy(circuit = run(state.circuit))
 }
 
@@ -23,6 +25,6 @@ class Errors {
     case 1 => throw errors.head
     case _ =>
       append(new PassException(s"${errors.length} errors detected!"))
-      throw new PassExceptions(errors)
+      throw new PassExceptions(errors.toSeq)
   }
 }

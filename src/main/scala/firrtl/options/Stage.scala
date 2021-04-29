@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl.options
 
@@ -23,25 +23,26 @@ abstract class Stage extends Phase {
     * @param annotations input annotations
     * @return output annotations
     */
-  def run(annotations: AnnotationSeq): AnnotationSeq
+  protected def run(annotations: AnnotationSeq): AnnotationSeq
 
   /** Execute this stage on some input annotations. Annotations will be read from any input annotation files.
     * @param annotations input annotations
     * @return output annotations
-    * @throws OptionsException if command line or annotation validation fails
+    * @throws firrtl.options.OptionsException if command line or annotation validation fails
     */
   final def transform(annotations: AnnotationSeq): AnnotationSeq = {
     val annotationsx =
-      Seq( new phases.GetIncludes,
-           new phases.ConvertLegacyAnnotations )
+      Seq(new phases.GetIncludes)
         .map(phases.DeletedWrapper(_))
         .foldLeft(annotations)((a, p) => p.transform(a))
 
     Logger.makeScope(annotationsx) {
-      Seq( new phases.AddDefaults,
-           new phases.Checks,
-           new Phase { def transform(a: AnnotationSeq) = run(a) },
-           new phases.WriteOutputAnnotations )
+      Seq(
+        new phases.AddDefaults,
+        new phases.Checks,
+        new Phase { def transform(a: AnnotationSeq) = run(a) },
+        new phases.WriteOutputAnnotations
+      )
         .map(phases.DeletedWrapper(_))
         .foldLeft(annotationsx)((a, p) => p.transform(a))
     }
@@ -51,7 +52,7 @@ abstract class Stage extends Phase {
     * @param args command line arguments
     * @param initialAnnotations annotation
     * @return output annotations
-    * @throws OptionsException if command line or annotation validation fails
+    * @throws firrtl.options.OptionsException if command line or annotation validation fails
     */
   final def execute(args: Array[String], annotations: AnnotationSeq): AnnotationSeq =
     transform(shell.parse(args, annotations))
@@ -62,6 +63,7 @@ abstract class Stage extends Phase {
   * @param stage the stage to run
   */
 class StageMain(val stage: Stage) {
+
   /** The main function that serves as this stage's command line interface.
     * @param args command line arguments
     */

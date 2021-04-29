@@ -1,4 +1,4 @@
-; See LICENSE for license details.
+; SPDX-License-Identifier: Apache-2.0
 circuit Legalize :
   module Legalize :
     input clock : Clock
@@ -38,4 +38,26 @@ circuit Legalize :
     node bar_15 = bits(bar, 15, 15)
     when neq(bar_15, UInt(1)) :
       printf(clock, UInt(1), "Assertion failed!\n bar_15 != 0\n")
+      stop(clock, UInt(1), 1)
+
+    ; Check neg of literals
+    node negUInt0 = neg(UInt(123))
+    when neq(negUInt0, SInt(-123)) :
+      printf(clock, UInt(1), "Assertion failed!\n negUInt0 != -123\n")
+      stop(clock, UInt(1), 1)
+    node negUInt1 = neg(UInt<8>(0))
+    when neq(negUInt1, SInt<8>(0)) :
+      printf(clock, UInt(1), "Assertion failed!\n negUInt1 != 0\n")
+      stop(clock, UInt(1), 1)
+    node negSInt0 = neg(SInt(123))
+    when neq(negSInt0, SInt(-123)) :
+      printf(clock, UInt(1), "Assertion failed!\n negSInt0 != -123\n")
+      stop(clock, UInt(1), 1)
+    node negSInt1 = neg(SInt(-123))
+    when neq(negSInt1, SInt(123)) :
+      printf(clock, UInt(1), "Assertion failed!\n negSInt1 != 123\n")
+      stop(clock, UInt(1), 1)
+    node negSInt2 = neg(SInt(0))
+    when neq(negSInt2, SInt(0)) :
+      printf(clock, UInt(1), "Assertion failed!\n negSInt2 != 0\n")
       stop(clock, UInt(1), 1)

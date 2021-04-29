@@ -1,7 +1,6 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtlTests.options.phases
-
 
 import firrtl.options.{Phase, TargetDirAnnotation}
 import firrtl.options.phases.AddDefaults
@@ -16,13 +15,13 @@ class AddDefaultsSpec extends AnyFlatSpec with Matchers {
     val defaultDir = TargetDirAnnotation(".")
   }
 
-  behavior of classOf[AddDefaults].toString
+  behavior.of(classOf[AddDefaults].toString)
 
   it should "add a TargetDirAnnotation if it does not exist" in new Fixture {
-    phase.transform(Seq.empty).toSeq should be (Seq(defaultDir))
+    phase.transform(Seq.empty).toSeq should be(Seq(defaultDir))
   }
 
   it should "don't add a TargetDirAnnotation if it exists" in new Fixture {
-    phase.transform(Seq(targetDir)).toSeq should be (Seq(targetDir))
+    phase.transform(Seq(targetDir)).toSeq should be(Seq(targetDir))
   }
 }

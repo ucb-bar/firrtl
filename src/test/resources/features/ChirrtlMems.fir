@@ -1,4 +1,4 @@
-; See LICENSE for license details.
+; SPDX-License-Identifier: Apache-2.0
 circuit ChirrtlMems :
   module ChirrtlMems :
     input clock : Clock
@@ -14,13 +14,13 @@ circuit ChirrtlMems :
     raddr <= add(raddr, UInt(1))
     infer mport r = ram[raddr], newClock
 
+    reg waddr : UInt<4>, clock with : (reset => (reset, UInt(0)))
+    waddr <= add(waddr, UInt(1))
+
     when wen :
       node newerClock = clock
-      reg waddr : UInt<4>, clock with : (reset => (reset, UInt(0)))
-      waddr <= add(waddr, UInt(1))
       infer mport w = ram[waddr], newerClock
       w <= waddr
-
       when eq(waddr, UInt(0)) :
         raddr <= UInt(0)
 

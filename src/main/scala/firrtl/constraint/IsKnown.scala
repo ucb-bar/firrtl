@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl.constraint
 
@@ -34,11 +34,9 @@ trait IsKnown extends Constraint {
   /** Floor */
   def floor: IsKnown
 
-  override def map(f: Constraint=>Constraint): Constraint = this
+  override def map(f: Constraint => Constraint): Constraint = this
 
   val children: Vector[Constraint] = Vector.empty[Constraint]
 
   def reduce(): IsKnown = this
 }
-
-

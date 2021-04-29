@@ -1,15 +1,16 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl.passes
 package memlib
 
+import firrtl.Utils.error
 import firrtl._
 import firrtl.annotations._
-import firrtl.options.{HasShellOptions, ShellOption}
-import Utils.error
-import java.io.{File, CharArrayWriter, PrintWriter}
-import wiring._
+import firrtl.options.{CustomFileEmission, HasShellOptions, ShellOption}
+import firrtl.passes.wiring._
 import firrtl.stage.{Forms, RunFirrtlTransformAnnotation}
+
+import java.io.{CharArrayWriter, PrintWriter}
 
 sealed trait PassOption
 case object InputConfigFileName extends PassOption
@@ -43,24 +44,33 @@ object PassConfigUtil {
   }
 }
 
-class ConfWriter(filename: String) {
-  val outputBuffer = new CharArrayWriter
-  def append(m: DefAnnotatedMemory) = {
-    // legacy
-    // assert that we don't overflow going from BigInt to Int conversion
+case class ReplSeqMemAnnotation(inputFileName: String, outputConfig: String) extends NoTargetAnnotation
+
+/** Generate conf file for a sequence of [[DefAnnotatedMemory]]
+  * @note file already has its suffix adding by `--replSeqMem`
+  */
+case class MemLibOutConfigFileAnnotation(file: String, annotatedMemories: Seq[DefAnnotatedMemory])
+    extends NoTargetAnnotation
+    with CustomFileEmission {
+  def baseFileName(annotations: AnnotationSeq) = file
+  def suffix = None
+  def getBytes = annotatedMemories.map { m =>
     require(bitWidth(m.dataType) <= Int.MaxValue)
-    m.maskGran.foreach { case x => require(x <= Int.MaxValue) }
-    val conf = MemConf(m.name, m.depth, bitWidth(m.dataType).toInt, m.readers.length, m.writers.length, m.readwriters.length, m.maskGran.map(_.toInt))
-    outputBuffer.append(conf.toString)
-  }
-  def serialize() = {
-    val outputFile = new PrintWriter(filename)
-    outputFile.write(outputBuffer.toString)
-    outputFile.close()
-  }
+    m.maskGran.foreach(x => require(x <= Int.MaxValue))
+    MemConf(
+      m.name,
+      m.depth,
+      bitWidth(m.dataType).toInt,
+      m.readers.length,
+      m.writers.length,
+      m.readwriters.length,
+      m.maskGran.map(_.toInt)
+    ).toString
+  }.mkString("\n").getBytes
 }
 
-case class ReplSeqMemAnnotation(inputFileName: String, outputConfig: String) extends NoTargetAnnotation
+private[memlib] case class AnnotatedMemoriesAnnotation(annotatedMemories: List[DefAnnotatedMemory])
+    extends NoTargetAnnotation
 
 object ReplSeqMemAnnotation {
   def parse(t: String): ReplSeqMemAnnotation = {
@@ -103,51 +113,37 @@ class SimpleTransform(p: Pass, form: CircuitForm) extends Transform {
 class SimpleMidTransform(p: Pass) extends SimpleTransform(p, MidForm)
 
 // SimpleRun instead of PassBased because of the arguments to passSeq
-class ReplSeqMem extends Transform with HasShellOptions with DependencyAPIMigration {
+class ReplSeqMem extends SeqTransform with HasShellOptions with DependencyAPIMigration {
 
   override def prerequisites = Forms.MidForm
   override def optionalPrerequisites = Seq.empty
   override def optionalPrerequisiteOf = Forms.MidEmitters
-  override def invalidates(a: Transform) = false
+  override def invalidates(a: Transform) = a match {
+    case InferTypes | ResolveKinds | ResolveFlows | LowerTypes => true
+    case _                                                     => false
+  }
 
   val options = Seq(
     new ShellOption[String](
       longOption = "repl-seq-mem",
-      toAnnotationSeq = (a: String) => Seq( passes.memlib.ReplSeqMemAnnotation.parse(a),
-                                            RunFirrtlTransformAnnotation(new ReplSeqMem) ),
+      toAnnotationSeq =
+        (a: String) => Seq(passes.memlib.ReplSeqMemAnnotation.parse(a), RunFirrtlTransformAnnotation(new ReplSeqMem)),
       helpText = "Blackbox and emit a configuration file for each sequential memory",
       shortOption = Some("frsq"),
-      helpValueName = Some("-c:<circuit>:-i:<file>:-o:<file>") ) )
+      helpValueName = Some("-c:<circuit>:-i:<file>:-o:<file>")
+    )
+  )
 
-  def transforms(inConfigFile: Option[YamlFileReader], outConfigFile: ConfWriter): Seq[Transform] =
-    Seq(new SimpleMidTransform(Legalize),
-        new SimpleMidTransform(ToMemIR),
-        new SimpleMidTransform(ResolveMaskGranularity),
-        new SimpleMidTransform(RenameAnnotatedMemoryPorts),
-        new ResolveMemoryReference,
-        new CreateMemoryAnnotations(inConfigFile),
-        new ReplaceMemMacros(outConfigFile),
-        new WiringTransform,
-        new SimpleMidTransform(RemoveEmpty),
-        new SimpleMidTransform(CheckInitialization),
-        new SimpleMidTransform(InferTypes),
-        Uniquify,
-        new SimpleMidTransform(ResolveKinds),
-        new SimpleMidTransform(ResolveFlows))
-
-  def execute(state: CircuitState): CircuitState = {
-    val annos = state.annotations.collect { case a: ReplSeqMemAnnotation => a }
-    annos match {
-      case Nil => state // Do nothing if there are no annotations
-      case Seq(ReplSeqMemAnnotation(inputFileName, outputConfig)) =>
-        val inConfigFile = {
-          if (inputFileName.isEmpty) None
-          else if (new File(inputFileName).exists) Some(new YamlFileReader(inputFileName))
-          else error("Input configuration file does not exist!")
-        }
-        val outConfigFile = new ConfWriter(outputConfig)
-        transforms(inConfigFile, outConfigFile).foldLeft(state) { (in, xform) => xform.runTransform(in) }
-      case _ => error("Unexpected transform annotation")
-    }
-  }
+  val transforms: Seq[Transform] =
+    Seq(
+      new SimpleMidTransform(Legalize),
+      new SimpleMidTransform(ToMemIR),
+      new SimpleMidTransform(ResolveMaskGranularity),
+      new SimpleMidTransform(RenameAnnotatedMemoryPorts),
+      new CreateMemoryAnnotations,
+      new ResolveMemoryReference,
+      new ReplaceMemMacros,
+      new WiringTransform,
+      new DumpMemoryAnnotations
+    )
 }

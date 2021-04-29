@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtlTests
 
@@ -13,7 +13,6 @@ class ExpandWhensSpec extends FirrtlFlatSpec {
     ResolveKinds,
     InferTypes,
     CheckTypes,
-    Uniquify,
     ResolveKinds,
     InferTypes,
     ResolveFlows,
@@ -23,54 +22,55 @@ class ExpandWhensSpec extends FirrtlFlatSpec {
     PullMuxes,
     ExpandConnects,
     RemoveAccesses,
-    ExpandWhens)
+    ExpandWhens
+  )
   private def executeTest(input: String, check: String, expected: Boolean) = {
     val circuit = Parser.parse(input.split("\n").toIterator)
-    val result = transforms.foldLeft(CircuitState(circuit, UnknownForm)) {
-      (c: CircuitState, p: Transform) => p.runTransform(c)
+    val result = transforms.foldLeft(CircuitState(circuit, UnknownForm)) { (c: CircuitState, p: Transform) =>
+      p.runTransform(c)
     }
     val c = result.circuit
-    val lines = c.serialize.split("\n") map normalized
+    val lines = c.serialize.split("\n").map(normalized)
 
     if (expected) {
-      c.serialize.contains(check) should be (true)
+      c.serialize.contains(check) should be(true)
     } else {
-      lines.foreach(_.contains(check) should be (false))
+      lines.foreach(_.contains(check) should be(false))
     }
   }
   "Expand Whens" should "not emit INVALID" in {
     val input =
-  """|circuit Tester :
-     |  module Tester :
-     |    input p : UInt<1>
-     |    when p :
-     |      wire a : {b : UInt<64>, c : UInt<64>}
-     |      a is invalid
-     |      a.b <= UInt<64>("h04000000000000000")""".stripMargin
+      """|circuit Tester :
+         |  module Tester :
+         |    input p : UInt<1>
+         |    when p :
+         |      wire a : {b : UInt<64>, c : UInt<64>}
+         |      a is invalid
+         |      a.b <= UInt<64>("h04000000000000000")""".stripMargin
     val check = "INVALID"
     executeTest(input, check, false)
   }
   it should "void unwritten memory fields" in {
     val input =
-  """|circuit Tester :
-     |  module Tester :
-     |    input clk : Clock
-     |    mem memory:
-     |      data-type => UInt<32>
-     |      depth => 32
-     |      reader => r0
-     |      writer => w0
-     |      read-latency => 0
-     |      write-latency => 1
-     |      read-under-write => undefined
-     |    memory.r0.addr <= UInt<1>(1)
-     |    memory.r0.en <= UInt<1>(1)
-     |    memory.r0.clk <= clk
-     |    memory.w0.addr <= UInt<1>(1)
-     |    memory.w0.data <= UInt<1>(1)
-     |    memory.w0.en <= UInt<1>(1)
-     |    memory.w0.clk <= clk
-     |    """.stripMargin
+      """|circuit Tester :
+         |  module Tester :
+         |    input clk : Clock
+         |    mem memory:
+         |      data-type => UInt<32>
+         |      depth => 32
+         |      reader => r0
+         |      writer => w0
+         |      read-latency => 0
+         |      write-latency => 1
+         |      read-under-write => undefined
+         |    memory.r0.addr <= UInt<1>(1)
+         |    memory.r0.en <= UInt<1>(1)
+         |    memory.r0.clk <= clk
+         |    memory.w0.addr <= UInt<1>(1)
+         |    memory.w0.data <= UInt<1>(1)
+         |    memory.w0.en <= UInt<1>(1)
+         |    memory.w0.clk <= clk
+         |    """.stripMargin
     val check = "VOID"
     executeTest(input, check, true)
   }
@@ -132,6 +132,35 @@ class ExpandWhensSpec extends FirrtlFlatSpec {
         |    else :
         |      c.in <= in[1]""".stripMargin
     val check = "mux(p, in[0], in[1])"
+    executeTest(input, check, true)
+  }
+  it should "handle asserts" in {
+    val input =
+      """circuit Test :
+        |  module Test :
+        |    input clock : Clock
+        |    input in : UInt<32>
+        |    input p : UInt<1>
+        |    when p :
+        |      assert(clock, eq(in, UInt<1>("h1")), UInt<1>("h1"), "assert0") : test_assert
+        |    else :
+        |      skip""".stripMargin
+    val check =
+      "assert(clock, eq(in, UInt<1>(\"h1\")), and(and(UInt<1>(\"h1\"), p), UInt<1>(\"h1\")), \"assert0\") : test_assert"
+    executeTest(input, check, true)
+  }
+  it should "handle stops" in {
+    val input =
+      """circuit Test :
+        |  module Test :
+        |    input clock : Clock
+        |    input in : UInt<32>
+        |    input p : UInt<1>
+        |    when p :
+        |      stop(clock, UInt(1), 1) : test_stop
+        |    else :
+        |      skip""".stripMargin
+    val check = """stop(clock, and(and(UInt<1>("h1"), p), UInt<1>("h1")), 1) : test_stop"""
     executeTest(input, check, true)
   }
 }

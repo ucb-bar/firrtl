@@ -1,23 +1,23 @@
-; See LICENSE for license details.
+; SPDX-License-Identifier: Apache-2.0
 circuit LargeParamTester :
   extmodule LargeParam :
     output out : UInt<1>
 
-    defname = LargeParam
+    defname = LargeParamUnsigned
     parameter WIDTH = 1
     parameter DATA = 0
 
   extmodule LargeParam_1 :
     output out : UInt<128>
 
-    defname = LargeParam
+    defname = LargeParamUnsigned
     parameter WIDTH = 128
     parameter DATA = 9223372036854775807000
 
   extmodule LargeParam_2 :
     output out : SInt<128>
 
-    defname = LargeParam
+    defname = LargeParamSigned
     parameter WIDTH = 128
     parameter DATA = -9223372036854775807000
 
@@ -40,4 +40,3 @@ circuit LargeParamTester :
         printf(clock, UInt(1), "Assertion failed\nTest Failed!\n")
         stop(clock, UInt(1), 1)
       stop(clock, UInt(1), 0)
-

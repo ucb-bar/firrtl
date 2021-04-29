@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl.stage.transforms
 
@@ -8,8 +8,10 @@ class ExpandPrepares(val underlying: Transform) extends Transform with WrappedTr
 
   /* Assert that this is not wrapping other transforms. */
   underlying match {
-    case _: WrappedTransform => throw new Exception(
-      s"'ExpandPrepares' must not wrap other 'WrappedTransforms', but wraps '${underlying.getClass.getName}'")
+    case _: WrappedTransform =>
+      throw new Exception(
+        s"'ExpandPrepares' must not wrap other 'WrappedTransforms', but wraps '${underlying.getClass.getName}'"
+      )
     case _ =>
   }
 

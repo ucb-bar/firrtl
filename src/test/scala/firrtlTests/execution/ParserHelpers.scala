@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package firrtlTests.execution
 
 import firrtl._
@@ -14,10 +16,10 @@ object ParseStatement {
     val indent = "    "
     val indented = stmtStr.split("\n").mkString(indent, s"\n${indent}", "")
     s"""circuit ${DUTRules.dutName} :
-         |  module ${DUTRules.dutName} :
-         |    input clock : Clock
-         |    input reset : UInt<1>
-         |${indented}""".stripMargin
+       |  module ${DUTRules.dutName} :
+       |    input clock : Clock
+       |    input reset : UInt<1>
+       |${indented}""".stripMargin
   }
 
   private def parse(stmtStr: String): Circuit = {

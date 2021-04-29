@@ -1,8 +1,8 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl.transforms
 
-import firrtl.analyses.{InstanceGraph, ModuleNamespaceAnnotation}
+import firrtl.analyses.{InstanceKeyGraph, ModuleNamespaceAnnotation}
 import firrtl.ir._
 import firrtl._
 import firrtl.stage.Forms
@@ -39,12 +39,12 @@ class RenameModules extends Transform with DependencyAPIMigration {
       logger.warn("Skipping Rename Modules")
       state
     } else {
-      val moduleOrder = new InstanceGraph(state.circuit).moduleOrder.reverse
+      val moduleOrder = InstanceKeyGraph(state.circuit).moduleOrder.reverse
       val nameMappings = new mutable.HashMap[String, String]()
       moduleOrder.foreach(collectNameMapping(namespace.get, nameMappings))
 
       val modulesx = state.circuit.modules.map {
-        case mod: Module => mod.mapStmt(onStmt(nameMappings)).mapString(nameMappings)
+        case mod: Module    => mod.mapStmt(onStmt(nameMappings)).mapString(nameMappings)
         case ext: ExtModule => ext
       }
 

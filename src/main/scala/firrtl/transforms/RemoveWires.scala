@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl
 package transforms
@@ -8,11 +8,13 @@ import firrtl.Utils._
 import firrtl.Mappers._
 import firrtl.traversals.Foreachers._
 import firrtl.WrappedExpression._
-import firrtl.graph.{MutableDiGraph, CyclicException}
+import firrtl.graph.{CyclicException, MutableDiGraph}
 import firrtl.options.Dependency
+import firrtl.Utils.getGroundZero
+import firrtl.backends.experimental.smt.random.DefRandom
 
 import scala.collection.mutable
-import scala.util.{Try, Success, Failure}
+import scala.util.{Failure, Success, Try}
 
 /** Replace wires with nodes in a legal, flow-forward order
   *
@@ -23,37 +25,45 @@ import scala.util.{Try, Success, Failure}
 class RemoveWires extends Transform with DependencyAPIMigration {
 
   override def prerequisites = firrtl.stage.Forms.MidForm ++
-    Seq( Dependency(passes.LowerTypes),
-         Dependency(passes.Legalize),
-         Dependency(transforms.RemoveReset),
-         Dependency[transforms.CheckCombLoops] )
+    Seq(
+      Dependency(passes.LowerTypes),
+      Dependency(passes.Legalize),
+      Dependency(passes.ResolveKinds),
+      Dependency(transforms.RemoveReset),
+      Dependency[transforms.CheckCombLoops]
+    )
 
   override def optionalPrerequisites = Seq(Dependency[checks.CheckResets])
 
   override def optionalPrerequisiteOf = Seq.empty
 
-  override def invalidates(a: Transform) = false
+  override def invalidates(a: Transform) = a match {
+    case passes.ResolveKinds => true
+    case _                   => false
+  }
 
-  // Extract all expressions that are references to a Node, Wire, or Reg
+  // Extract all expressions that are references to a Node, Wire, Reg or Rand
   // Since we are operating on LowForm, they can only be WRefs
   private def extractNodeWireRegRefs(expr: Expression): Seq[WRef] = {
     val refs = mutable.ArrayBuffer.empty[WRef]
     def rec(e: Expression): Expression = {
       e match {
-        case ref @ WRef(_,_, WireKind | NodeKind | RegKind, _) => refs += ref
+        case ref @ WRef(_, _, WireKind | NodeKind | RegKind | RandomKind, _) => refs += ref
         case nested @ (_: Mux | _: DoPrim | _: ValidIf) => nested.foreach(rec)
         case _ => // Do nothing
       }
       e
     }
     rec(expr)
-    refs
+    refs.toSeq
   }
 
   // Transform netlist into DefNodes
   private def getOrderedNodes(
-    netlist: mutable.LinkedHashMap[WrappedExpression, (Seq[Expression], Info)],
-    regInfo: mutable.Map[WrappedExpression, DefRegister]): Try[Seq[Statement]] = {
+    netlist:  mutable.LinkedHashMap[WrappedExpression, (Seq[Expression], Info)],
+    regInfo:  mutable.Map[WrappedExpression, DefRegister],
+    randInfo: mutable.Map[WrappedExpression, DefRandom]
+  ): Try[Seq[Statement]] = {
     val digraph = new MutableDiGraph[WrappedExpression]
     for ((sink, (exprs, _)) <- netlist) {
       digraph.addVertex(sink)
@@ -72,7 +82,8 @@ class RemoveWires extends Transform with DependencyAPIMigration {
       ordered.map { key =>
         val WRef(name, _, kind, _) = key.e1
         kind match {
-          case RegKind => regInfo(key)
+          case RegKind    => regInfo(key)
+          case RandomKind => randInfo(key)
           case WireKind | NodeKind =>
             val (Seq(rhs), info) = netlist(key)
             DefNode(info, name, rhs)
@@ -92,6 +103,8 @@ class RemoveWires extends Transform with DependencyAPIMigration {
     val wireInfo = mutable.HashMap.empty[WrappedExpression, Info]
     // Additional info about registers
     val regInfo = mutable.HashMap.empty[WrappedExpression, DefRegister]
+    // Additional info about rand statements
+    val randInfo = mutable.HashMap.empty[WrappedExpression, DefRandom]
 
     def onStmt(stmt: Statement): Statement = {
       stmt match {
@@ -102,29 +115,36 @@ class RemoveWires extends Transform with DependencyAPIMigration {
         case reg: DefRegister =>
           val resetDep = reg.reset.tpe match {
             case AsyncResetType => Some(reg.reset)
-            case _ => None
+            case _              => None
           }
           val initDep = Some(reg.init).filter(we(WRef(reg)) != we(_)) // Dependency exists IF reg doesn't init itself
           regInfo(we(WRef(reg))) = reg
           netlist(we(WRef(reg))) = (Seq(reg.clock) ++ resetDep ++ initDep, reg.info)
-        case decl: IsDeclaration => // Keep all declarations except for nodes and non-Analog wires
+        case rand: DefRandom =>
+          randInfo(we(Reference(rand))) = rand
+          netlist(we(Reference(rand))) = (rand.clock ++: rand.en +: List(), rand.info)
+        case decl: CanBeReferenced =>
+          // Keep all declarations except for nodes and non-Analog wires and "other" statements.
+          // Thus this is expected to match DefInstance and DefMemory which both do not connect to
+          // any signals directly (instead a separate Connect is used).
           decls += decl
-        case con @ Connect(cinfo, lhs, rhs) => kind(lhs) match {
-          case WireKind =>
-            // Be sure to pad the rhs since nodes get their type from the rhs
-            val paddedRhs = ConstantPropagation.pad(rhs, lhs.tpe)
-            val dinfo = wireInfo(lhs)
-            netlist(we(lhs)) = (Seq(paddedRhs), MultiInfo(dinfo, cinfo))
-          case _ => otherStmts += con // Other connections just pass through
-        }
+        case con @ Connect(cinfo, lhs, rhs) =>
+          kind(lhs) match {
+            case WireKind =>
+              // Be sure to pad the rhs since nodes get their type from the rhs
+              val paddedRhs = ConstantPropagation.pad(rhs, lhs.tpe)
+              val dinfo = wireInfo(lhs)
+              netlist(we(lhs)) = (Seq(paddedRhs), MultiInfo(dinfo, cinfo))
+            case _ => otherStmts += con // Other connections just pass through
+          }
         case invalid @ IsInvalid(info, expr) =>
           kind(expr) match {
             case WireKind =>
-              val width = expr.tpe match { case GroundType(width) => width } // LowFirrtl
-              netlist(we(expr)) = (Seq(ValidIf(Utils.zero, UIntLiteral(BigInt(0), width), expr.tpe)), info)
+              val (tpe, width) = expr.tpe match { case g: GroundType => (g, g.width) } // LowFirrtl
+              netlist(we(expr)) = (Seq(ValidIf(Utils.zero, getGroundZero(tpe), tpe)), info)
             case _ => otherStmts += invalid
           }
-        case other @ (_: Print | _: Stop | _: Attach) =>
+        case other @ (_: Print | _: Stop | _: Attach | _: Verification) =>
           otherStmts += other
         case EmptyStmt => // Dont bother keeping EmptyStmts around
         case block: Block => block.foreach(onStmt)
@@ -136,14 +156,16 @@ class RemoveWires extends Transform with DependencyAPIMigration {
     m match {
       case mod @ Module(info, name, ports, body) =>
         onStmt(body)
-        getOrderedNodes(netlist, regInfo) match {
+        getOrderedNodes(netlist, regInfo, randInfo) match {
           case Success(logic) =>
-            Module(info, name, ports, Block(decls ++ logic ++ otherStmts))
+            Module(info, name, ports, Block(List() ++ decls ++ logic ++ otherStmts))
           // If we hit a CyclicException, just abort removing wires
           case Failure(c: CyclicException) =>
             val problematicNode = c.node
-            logger.warn(s"Cycle found in module $name, " +
-              s"wires will not be removed which can prevent optimizations! Problem node: $problematicNode")
+            logger.warn(
+              s"Cycle found in module $name, " +
+                s"wires will not be removed which can prevent optimizations! Problem node: $problematicNode"
+            )
             mod
           case Failure(other) => throw other
         }
@@ -151,13 +173,6 @@ class RemoveWires extends Transform with DependencyAPIMigration {
     }
   }
 
-  /* @todo move ResolveKinds outside */
-  private val cleanup = Seq(
-    passes.ResolveKinds
-  )
-
-  def execute(state: CircuitState): CircuitState = {
-    val result = state.copy(circuit = state.circuit.map(onModule))
-    cleanup.foldLeft(result) { case (in, xform) => xform.execute(in) }
-  }
+  def execute(state: CircuitState): CircuitState =
+    state.copy(circuit = state.circuit.map(onModule))
 }

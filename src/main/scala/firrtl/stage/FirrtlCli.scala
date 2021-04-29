@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl.stage
 
@@ -11,15 +11,20 @@ import firrtl.transforms.NoCircuitDedupAnnotation
   */
 trait FirrtlCli { this: Shell =>
   parser.note("FIRRTL Compiler Options")
-  Seq( FirrtlFileAnnotation,
-       OutputFileAnnotation,
-       InfoModeAnnotation,
-       FirrtlSourceAnnotation,
-       CompilerAnnotation,
-       RunFirrtlTransformAnnotation,
-       firrtl.EmitCircuitAnnotation,
-       firrtl.EmitAllModulesAnnotation,
-       NoCircuitDedupAnnotation )
+  Seq(
+    FirrtlFileAnnotation,
+    OutputFileAnnotation,
+    InfoModeAnnotation,
+    FirrtlSourceAnnotation,
+    RunFirrtlTransformAnnotation,
+    firrtl.EmitCircuitAnnotation,
+    firrtl.EmitAllModulesAnnotation,
+    NoCircuitDedupAnnotation,
+    WarnNoScalaVersionDeprecation,
+    PrettyNoExprInlining,
+    DisableFold,
+    OptimizeForFPGA
+  )
     .map(_.addOptions(parser))
 
   phases.DriverCompatibility.TopNameAnnotation.addOptions(parser)

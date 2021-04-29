@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl.annotations.analysis
 
@@ -72,7 +72,7 @@ case class DuplicationHelper(existingModules: Set[String]) {
         val prefix = path.last._2.value + "___"
         val postfix = top + "_" + path.map { case (i, m) => i.value }.mkString("_")
         val ns = mutable.HashSet(allModules.toSeq: _*)
-        val finalName = firrtl.passes.Uniquify.findValidPrefix(prefix, Seq(postfix), ns) + postfix
+        val finalName = firrtl.Namespace.findValidPrefix(prefix, Seq(postfix), ns) + postfix
         allModules += finalName
         cachedNames((top, path)) = finalName
         finalName
@@ -88,10 +88,12 @@ case class DuplicationHelper(existingModules: Set[String]) {
     * @param originalOfModule original module being instantiated in originalModule
     * @return
     */
-  def getNewOfModule(originalModule: String,
-                     newModule: String,
-                     instance: Instance,
-                     originalOfModule: OfModule): OfModule = {
+  def getNewOfModule(
+    originalModule:   String,
+    newModule:        String,
+    instance:         Instance,
+    originalOfModule: OfModule
+  ): OfModule = {
     dupMap.get(originalModule) match {
       case None => // No duplication, can return originalOfModule
         originalOfModule
@@ -129,18 +131,18 @@ case class DuplicationHelper(existingModules: Set[String]) {
     val newTops = getDuplicates(top)
     newTops.map { newTop =>
       val newPath = mutable.ArrayBuffer[TargetToken]()
-      path.foldLeft((top, newTop)) { case ((originalModule, newModule), (instance, ofModule)) =>
-        val newOfModule = getNewOfModule(originalModule, newModule, instance, ofModule)
-        newPath ++= Seq(instance, newOfModule)
-        (ofModule.value, newOfModule.value)
+      path.foldLeft((top, newTop)) {
+        case ((originalModule, newModule), (instance, ofModule)) =>
+          val newOfModule = getNewOfModule(originalModule, newModule, instance, ofModule)
+          newPath ++= Seq(instance, newOfModule)
+          (ofModule.value, newOfModule.value)
       }
-      val module = if(newPath.nonEmpty) newPath.last.value.toString else newTop
+      val module = if (newPath.nonEmpty) newPath.last.value.toString else newTop
       t.notPath match {
-        case Seq() => ModuleTarget(t.circuit, module)
+        case Seq()                               => ModuleTarget(t.circuit, module)
         case Instance(i) +: OfModule(m) +: Seq() => ModuleTarget(t.circuit, module)
-        case Ref(r) +: components => ReferenceTarget(t.circuit, module, Nil, r, components)
+        case Ref(r) +: components                => ReferenceTarget(t.circuit, module, Nil, r, components)
       }
     }.toSeq
   }
 }
-

@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl.options
 
@@ -10,26 +10,28 @@ import java.io.File
   * @param programArgs explicit program arguments
   * @param outputAnnotationFileName an output annotation filename
   */
-class StageOptions private [firrtl] (
-  val targetDir:         String         = TargetDirAnnotation().directory,
-  val annotationFilesIn: Seq[String]    = Seq.empty,
+class StageOptions private[firrtl] (
+  val targetDir:         String = TargetDirAnnotation().directory,
+  val annotationFilesIn: Seq[String] = Seq.empty,
   val annotationFileOut: Option[String] = None,
-  val programArgs:       Seq[String]    = Seq.empty,
-  val writeDeleted:      Boolean        = false ) {
+  val programArgs:       Seq[String] = Seq.empty,
+  val writeDeleted:      Boolean = false) {
 
-  private [options] def copy(
-    targetDir:         String         = targetDir,
-    annotationFilesIn: Seq[String]    = annotationFilesIn,
+  private[options] def copy(
+    targetDir:         String = targetDir,
+    annotationFilesIn: Seq[String] = annotationFilesIn,
     annotationFileOut: Option[String] = annotationFileOut,
-    programArgs:       Seq[String]    = programArgs,
-    writeDeleted:      Boolean        = writeDeleted ): StageOptions = {
+    programArgs:       Seq[String] = programArgs,
+    writeDeleted:      Boolean = writeDeleted
+  ): StageOptions = {
 
     new StageOptions(
       targetDir = targetDir,
       annotationFilesIn = annotationFilesIn,
       annotationFileOut = annotationFileOut,
       programArgs = programArgs,
-      writeDeleted = writeDeleted )
+      writeDeleted = writeDeleted
+    )
 
   }
 
@@ -59,11 +61,13 @@ class StageOptions private [firrtl] (
       } else {
         new File(targetDir + "/" + f)
       }
-    }.getCanonicalFile
+    }.toPath.normalize.toFile
 
-    val parent = file.getParentFile
-
-    if (!parent.exists) { parent.mkdirs() }
+    file.getParentFile match {
+      case null                       =>
+      case parent if (!parent.exists) => parent.mkdirs()
+      case _                          =>
+    }
 
     file.toString
   }

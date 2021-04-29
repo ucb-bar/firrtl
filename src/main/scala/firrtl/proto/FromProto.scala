@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl
 package proto
@@ -8,7 +8,7 @@ import java.io.{File, FileInputStream, InputStream}
 import collection.JavaConverters._
 import FirrtlProtos._
 import com.google.protobuf.CodedInputStream
-import Firrtl.Statement.ReadUnderWrite
+import Firrtl.Statement.{Formal, ReadUnderWrite}
 
 object FromProto {
 
@@ -34,10 +34,10 @@ object FromProto {
   }
 
   // Convert from ProtoBuf message repeated Statements to FIRRRTL Block
-  private def compressStmts(stmts: Seq[ir.Statement]): ir.Statement = stmts match {
-    case Seq() => ir.EmptyStmt
-    case Seq(stmt) => stmt
-    case multiple => ir.Block(multiple)
+  private def compressStmts(stmts: scala.collection.Seq[ir.Statement]): ir.Statement = stmts match {
+    case scala.collection.Seq()     => ir.EmptyStmt
+    case scala.collection.Seq(stmt) => stmt
+    case multiple                   => ir.Block(multiple.toSeq)
   }
 
   def convert(info: Firrtl.SourceInfo): ir.Info =
@@ -45,9 +45,9 @@ object FromProto {
       case Firrtl.SourceInfo.POSITION_FIELD_NUMBER =>
         val pos = info.getPosition
         val str = s"${pos.getFilename} ${pos.getLine}:${pos.getColumn}"
-        ir.FileInfo(ir.StringLit(str))
+        ir.FileInfo.fromUnescaped(str)
       case Firrtl.SourceInfo.TEXT_FIELD_NUMBER =>
-        ir.FileInfo(ir.StringLit(info.getText))
+        ir.FileInfo.fromUnescaped(info.getText)
       // NONE_FIELD_NUMBER or anything else
       case _ => ir.NoInfo
     }
@@ -86,26 +86,30 @@ object FromProto {
     ir.SubAccess(convert(access.getExpression), convert(access.getIndex), ir.UnknownType)
 
   def convert(primop: Firrtl.Expression.PrimOp): ir.DoPrim = {
-    val args = primop.getArgList.asScala.map(convert(_))
-    val consts = primop.getConstList.asScala.map(convert(_))
+    val args = primop.getArgList.asScala.map(convert(_)).toSeq
+    val consts = primop.getConstList.asScala.map(convert(_)).toSeq
     ir.DoPrim(convert(primop.getOp), args, consts, ir.UnknownType)
   }
 
   def convert(mux: Firrtl.Expression.Mux): ir.Mux =
     ir.Mux(convert(mux.getCondition), convert(mux.getTValue), convert(mux.getFValue), ir.UnknownType)
 
+  def convert(validif: Firrtl.Expression.ValidIf): ir.ValidIf =
+    ir.ValidIf(convert(validif.getCondition), convert(validif.getValue), ir.UnknownType)
+
   def convert(expr: Firrtl.Expression): ir.Expression = {
     import Firrtl.Expression._
     expr.getExpressionCase.getNumber match {
-      case REFERENCE_FIELD_NUMBER => ir.Reference(expr.getReference.getId, ir.UnknownType)
-      case SUB_FIELD_FIELD_NUMBER => convert(expr.getSubField)
-      case SUB_INDEX_FIELD_NUMBER => convert(expr.getSubIndex)
-      case SUB_ACCESS_FIELD_NUMBER => convert(expr.getSubAccess)
-      case UINT_LITERAL_FIELD_NUMBER => convert(expr.getUintLiteral)
-      case SINT_LITERAL_FIELD_NUMBER => convert(expr.getSintLiteral)
+      case REFERENCE_FIELD_NUMBER     => ir.Reference(expr.getReference.getId, ir.UnknownType)
+      case SUB_FIELD_FIELD_NUMBER     => convert(expr.getSubField)
+      case SUB_INDEX_FIELD_NUMBER     => convert(expr.getSubIndex)
+      case SUB_ACCESS_FIELD_NUMBER    => convert(expr.getSubAccess)
+      case UINT_LITERAL_FIELD_NUMBER  => convert(expr.getUintLiteral)
+      case SINT_LITERAL_FIELD_NUMBER  => convert(expr.getSintLiteral)
       case FIXED_LITERAL_FIELD_NUMBER => convert(expr.getFixedLiteral)
-      case PRIM_OP_FIELD_NUMBER => convert(expr.getPrimOp)
-      case MUX_FIELD_NUMBER => convert(expr.getMux)
+      case PRIM_OP_FIELD_NUMBER       => convert(expr.getPrimOp)
+      case MUX_FIELD_NUMBER           => convert(expr.getMux)
+      case VALID_IF_FIELD_NUMBER      => convert(expr.getValidIf)
     }
   }
 
@@ -119,8 +123,14 @@ object FromProto {
     ir.DefWire(convert(info), wire.getId, convert(wire.getType))
 
   def convert(reg: Firrtl.Statement.Register, info: Firrtl.SourceInfo): ir.DefRegister =
-    ir.DefRegister(convert(info), reg.getId, convert(reg.getType), convert(reg.getClock),
-                   convert(reg.getReset), convert(reg.getInit))
+    ir.DefRegister(
+      convert(info),
+      reg.getId,
+      convert(reg.getType),
+      convert(reg.getClock),
+      convert(reg.getReset),
+      convert(reg.getInit)
+    )
 
   def convert(node: Firrtl.Statement.Node, info: Firrtl.SourceInfo): ir.DefNode =
     ir.DefNode(convert(info), node.getId, convert(node.getExpression))
@@ -136,8 +146,11 @@ object FromProto {
 
   def convert(ruw: ReadUnderWrite): ir.ReadUnderWrite.Value = ruw match {
     case ReadUnderWrite.UNDEFINED => ir.ReadUnderWrite.Undefined
-    case ReadUnderWrite.OLD => ir.ReadUnderWrite.Old
-    case ReadUnderWrite.NEW => ir.ReadUnderWrite.New
+    case ReadUnderWrite.OLD       => ir.ReadUnderWrite.Old
+    case ReadUnderWrite.NEW       => ir.ReadUnderWrite.New
+    case ReadUnderWrite.UNRECOGNIZED =>
+      val msg = s"Unrecognized ReadUnderWrite value '$ruw', perhaps this version of FIRRTL is too old?"
+      throw new FirrtlUserException(msg)
   }
 
   def convert(dt: Firrtl.Statement.CMemory.TypeAndDepth): (ir.Type, BigInt) =
@@ -157,10 +170,14 @@ object FromProto {
 
   import Firrtl.Statement.MemoryPort.Direction._
   def convert(mportdir: Firrtl.Statement.MemoryPort.Direction): MPortDir = mportdir match {
-    case MEMORY_PORT_DIRECTION_INFER => MInfer
-    case MEMORY_PORT_DIRECTION_READ => MRead
-    case MEMORY_PORT_DIRECTION_WRITE => MWrite
+    case MEMORY_PORT_DIRECTION_INFER      => MInfer
+    case MEMORY_PORT_DIRECTION_READ       => MRead
+    case MEMORY_PORT_DIRECTION_WRITE      => MWrite
     case MEMORY_PORT_DIRECTION_READ_WRITE => MReadWrite
+    case MEMORY_PORT_DIRECTION_UNKNOWN    => MInfer
+    case UNRECOGNIZED =>
+      val msg = s"Unrecognized MemoryPort Direction value '$mportdir', perhaps this version of FIRRTL is too old?"
+      throw new FirrtlUserException(msg)
   }
 
   def convert(port: Firrtl.Statement.MemoryPort, info: Firrtl.SourceInfo): CDefMPort = {
@@ -169,7 +186,7 @@ object FromProto {
   }
 
   def convert(printf: Firrtl.Statement.Printf, info: Firrtl.SourceInfo): ir.Print = {
-    val args = printf.getArgList.asScala.map(convert(_))
+    val args = printf.getArgList.asScala.map(convert(_)).toSeq
     val str = ir.StringLit(printf.getValue)
     ir.Print(convert(info), str, args, convert(printf.getClk), convert(printf.getEn))
   }
@@ -177,22 +194,51 @@ object FromProto {
   def convert(stop: Firrtl.Statement.Stop, info: Firrtl.SourceInfo): ir.Stop =
     ir.Stop(convert(info), stop.getReturnValue, convert(stop.getClk), convert(stop.getEn))
 
+  def convert(formal: Formal): ir.Formal.Value = formal match {
+    case Formal.ASSERT => ir.Formal.Assert
+    case Formal.ASSUME => ir.Formal.Assume
+    case Formal.COVER  => ir.Formal.Cover
+    case Formal.UNRECOGNIZED =>
+      val msg = s"Unrecognized Formal value '$formal', perhaps this version of FIRRTL is too old?"
+      throw new FirrtlUserException(msg)
+  }
+
+  def convert(ver: Firrtl.Statement.Verification, info: Firrtl.SourceInfo): ir.Verification =
+    ir.Verification(
+      convert(ver.getOp),
+      convert(info),
+      convert(ver.getClk),
+      convert(ver.getCond),
+      convert(ver.getEn),
+      ir.StringLit(ver.getMsg)
+    )
+
   def convert(mem: Firrtl.Statement.Memory, info: Firrtl.SourceInfo): ir.DefMemory = {
     val dtype = convert(mem.getType)
-    val rs = mem.getReaderIdList.asScala
-    val ws = mem.getWriterIdList.asScala
-    val rws = mem.getReadwriterIdList.asScala
+    val rs = mem.getReaderIdList.asScala.toSeq
+    val ws = mem.getWriterIdList.asScala.toSeq
+    val rws = mem.getReadwriterIdList.asScala.toSeq
     import Firrtl.Statement.Memory._
     val depth = mem.getDepthCase.getNumber match {
-      case UINT_DEPTH_FIELD_NUMBER => BigInt(mem.getUintDepth)
+      case UINT_DEPTH_FIELD_NUMBER   => BigInt(mem.getUintDepth)
       case BIGINT_DEPTH_FIELD_NUMBER => convert(mem.getBigintDepth)
     }
-    ir.DefMemory(convert(info), mem.getId, dtype, depth, mem.getWriteLatency, mem.getReadLatency,
-                 rs, ws, rws, convert(mem.getReadUnderWrite))
+    ir.DefMemory(
+      convert(info),
+      mem.getId,
+      dtype,
+      depth,
+      mem.getWriteLatency,
+      mem.getReadLatency,
+      rs,
+      ws,
+      rws,
+      convert(mem.getReadUnderWrite)
+    )
   }
 
   def convert(attach: Firrtl.Statement.Attach, info: Firrtl.SourceInfo): ir.Attach = {
-    val exprs = attach.getExpressionList.asScala.map(convert(_))
+    val exprs = attach.getExpressionList.asScala.map(convert(_)).toSeq
     ir.Attach(convert(info), exprs)
   }
 
@@ -200,21 +246,22 @@ object FromProto {
     import Firrtl.Statement._
     val info = stmt.getSourceInfo
     stmt.getStatementCase.getNumber match {
-      case NODE_FIELD_NUMBER => convert(stmt.getNode, info)
-      case CONNECT_FIELD_NUMBER => convert(stmt.getConnect, info)
+      case NODE_FIELD_NUMBER            => convert(stmt.getNode, info)
+      case CONNECT_FIELD_NUMBER         => convert(stmt.getConnect, info)
       case PARTIAL_CONNECT_FIELD_NUMBER => convert(stmt.getPartialConnect, info)
-      case WIRE_FIELD_NUMBER => convert(stmt.getWire, info)
-      case REGISTER_FIELD_NUMBER => convert(stmt.getRegister, info)
-      case WHEN_FIELD_NUMBER => convert(stmt.getWhen, info)
-      case INSTANCE_FIELD_NUMBER => convert(stmt.getInstance, info)
-      case PRINTF_FIELD_NUMBER => convert(stmt.getPrintf, info)
-      case STOP_FIELD_NUMBER => convert(stmt.getStop, info)
-      case MEMORY_FIELD_NUMBER => convert(stmt.getMemory, info)
+      case WIRE_FIELD_NUMBER            => convert(stmt.getWire, info)
+      case REGISTER_FIELD_NUMBER        => convert(stmt.getRegister, info)
+      case WHEN_FIELD_NUMBER            => convert(stmt.getWhen, info)
+      case INSTANCE_FIELD_NUMBER        => convert(stmt.getInstance, info)
+      case PRINTF_FIELD_NUMBER          => convert(stmt.getPrintf, info)
+      case STOP_FIELD_NUMBER            => convert(stmt.getStop, info)
+      case MEMORY_FIELD_NUMBER          => convert(stmt.getMemory, info)
       case IS_INVALID_FIELD_NUMBER =>
         ir.IsInvalid(convert(info), convert(stmt.getIsInvalid.getExpression))
-      case CMEMORY_FIELD_NUMBER => convert(stmt.getCmemory, info)
-      case MEMORY_PORT_FIELD_NUMBER => convert(stmt.getMemoryPort, info)
-      case ATTACH_FIELD_NUMBER => convert(stmt.getAttach, info)
+      case CMEMORY_FIELD_NUMBER      => convert(stmt.getCmemory, info)
+      case MEMORY_PORT_FIELD_NUMBER  => convert(stmt.getMemoryPort, info)
+      case ATTACH_FIELD_NUMBER       => convert(stmt.getAttach, info)
+      case VERIFICATION_FIELD_NUMBER => convert(stmt.getVerification, info)
     }
   }
 
@@ -230,7 +277,7 @@ object FromProto {
     val w = if (ut.hasWidth) convert(ut.getWidth) else ir.UnknownWidth
     ir.UIntType(w)
   }
-  
+
   def convert(st: Firrtl.Type.SIntType): ir.SIntType = {
     val w = if (st.hasWidth) convert(st.getWidth) else ir.UnknownWidth
     ir.SIntType(w)
@@ -258,23 +305,27 @@ object FromProto {
   def convert(tpe: Firrtl.Type): ir.Type = {
     import Firrtl.Type._
     tpe.getTypeCase.getNumber match {
-      case UINT_TYPE_FIELD_NUMBER => convert(tpe.getUintType)
-      case SINT_TYPE_FIELD_NUMBER => convert(tpe.getSintType)
-      case FIXED_TYPE_FIELD_NUMBER => convert(tpe.getFixedType)
-      case CLOCK_TYPE_FIELD_NUMBER => ir.ClockType
+      case UINT_TYPE_FIELD_NUMBER        => convert(tpe.getUintType)
+      case SINT_TYPE_FIELD_NUMBER        => convert(tpe.getSintType)
+      case FIXED_TYPE_FIELD_NUMBER       => convert(tpe.getFixedType)
+      case CLOCK_TYPE_FIELD_NUMBER       => ir.ClockType
       case ASYNC_RESET_TYPE_FIELD_NUMBER => ir.AsyncResetType
-      case RESET_TYPE_FIELD_NUMBER => ir.ResetType
-      case ANALOG_TYPE_FIELD_NUMBER => convert(tpe.getAnalogType)
+      case RESET_TYPE_FIELD_NUMBER       => ir.ResetType
+      case ANALOG_TYPE_FIELD_NUMBER      => convert(tpe.getAnalogType)
       case BUNDLE_TYPE_FIELD_NUMBER =>
-        ir.BundleType(tpe.getBundleType.getFieldList.asScala.map(convert(_)))
+        ir.BundleType(tpe.getBundleType.getFieldList.asScala.map(convert(_)).toSeq)
       case VECTOR_TYPE_FIELD_NUMBER => convert(tpe.getVectorType)
     }
   }
 
   def convert(dir: Firrtl.Port.Direction): ir.Direction = {
+    import Firrtl.Port.Direction._
     dir match {
-      case Firrtl.Port.Direction.PORT_DIRECTION_IN => ir.Input
-      case Firrtl.Port.Direction.PORT_DIRECTION_OUT => ir.Output
+      case PORT_DIRECTION_IN  => ir.Input
+      case PORT_DIRECTION_OUT => ir.Output
+      case (PORT_DIRECTION_UNKNOWN | UNRECOGNIZED) =>
+        val msg = s"Unrecognized Port Direction value '$dir', perhaps this version of FIRRTL is too old?"
+        throw new FirrtlUserException(msg)
     }
   }
 
@@ -288,25 +339,25 @@ object FromProto {
     import Firrtl.Module.ExternalModule.Parameter._
     val name = param.getId
     param.getValueCase.getNumber match {
-      case INTEGER_FIELD_NUMBER => ir.IntParam(name, convert(param.getInteger))
-      case DOUBLE_FIELD_NUMBER => ir.DoubleParam(name, param.getDouble)
-      case STRING_FIELD_NUMBER => ir.StringParam(name, ir.StringLit(param.getString))
+      case INTEGER_FIELD_NUMBER    => ir.IntParam(name, convert(param.getInteger))
+      case DOUBLE_FIELD_NUMBER     => ir.DoubleParam(name, param.getDouble)
+      case STRING_FIELD_NUMBER     => ir.StringParam(name, ir.StringLit(param.getString))
       case RAW_STRING_FIELD_NUMBER => ir.RawStringParam(name, param.getRawString)
     }
   }
 
   def convert(module: Firrtl.Module.UserModule): ir.Module = {
     val name = module.getId
-    val ports = module.getPortList.asScala.map(convert(_))
-    val stmts = module.getStatementList.asScala.map(convert(_))
+    val ports = module.getPortList.asScala.map(convert(_)).toSeq
+    val stmts = module.getStatementList.asScala.map(convert(_)).toSeq
     ir.Module(ir.NoInfo, name, ports, ir.Block(stmts))
   }
 
   def convert(module: Firrtl.Module.ExternalModule): ir.ExtModule = {
     val name = module.getId
-    val ports = module.getPortList.asScala.map(convert(_))
+    val ports = module.getPortList.asScala.map(convert(_)).toSeq
     val defname = module.getDefinedName
-    val params = module.getParameterList.asScala.map(convert(_))
+    val params = module.getParameterList.asScala.map(convert(_)).toSeq
     ir.ExtModule(ir.NoInfo, name, ports, defname, params)
   }
 
@@ -321,7 +372,7 @@ object FromProto {
     require(proto.getCircuitCount == 1, "Only 1 circuit is currently supported")
     val c = proto.getCircuit(0)
     require(c.getTopCount == 1, "Only 1 top is currently supported")
-    val modules = c.getModuleList.asScala.map(convert(_))
+    val modules = c.getModuleList.asScala.map(convert(_)).toSeq
     val top = c.getTop(0).getName
     ir.Circuit(ir.NoInfo, modules, top)
   }

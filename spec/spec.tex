@@ -1,3 +1,4 @@
+% SPDX-License-Identifier: Apache-2.0
 
 %Useful Macros
 \newcommand{\id}{\text{id }}
@@ -219,7 +220,7 @@ Included below are examples of the syntax for all possible combinations of speci
 fixed-point type parameters.
 \begin{lstlisting}
 Fixed<3><<2>>    ; 3-bit width, 2 bits after binary point
-Fixed<10>        ; 1-bit width, inferred binary point
+Fixed<10>        ; 10-bit width, inferred binary point
 Fixed<<-4>>      ; Inferred width, binary point of -4
 Fixed            ; Inferred width and binary point
 \end{lstlisting}
@@ -772,7 +773,7 @@ module MyModule :
 This is an illegal FIRRTL circuit and an error will be thrown during compilation. All wires, memory ports, instance ports, and module ports that can be connected to must be connected to under all conditions. Registers do not need to be connected to under all conditions, as it will keep its previous value if unconnected.
 
 \subsubsection{Scoping}
-The conditional statement creates a new {\em scope} within each of its \verb|when| and \verb|else| branches. It is an error to refer to any component declared within a branch after the branch has ended.
+The conditional statement creates a new {\em scope} within each of its \verb|when| and \verb|else| branches. It is an error to refer to any component declared within a branch after the branch has ended. As mention in section~\ref{namespaces}, circuit component declarations in a module must be unique within the module's flat namespace; this means that shadowing a component in an enclosing scope with a component of the same name inside a conditional statement is not allowed.
 
 \subsubsection{Conditional Last Connect Semantics}\label{conditional_last_connect}
 In the case where a connection to a circuit component is followed by a conditional statement containing a connection to the same component, the connection is overwritten only when the condition holds. Intuitively, a multiplexer is generated such that when the condition is low, the multiplexer returns the old value, and otherwise returns the new value. For details about the multiplexer, see section \ref{multiplexers}.
@@ -977,15 +978,26 @@ Modules have the property that instances can always be {\em inlined} into the pa
 
 To disallow infinitely recursive hardware, modules cannot contain instances of itself, either directly, or indirectly through instances of other modules it instantiates.
 
-\subsection{Stops}
+\subsection{Stops} \label{stop_stmt}
 The stop statement is used to halt simulations of the circuit. Backends are free to generate hardware to stop a running circuit for the purpose of debugging, but this is not required by the FIRRTL specification.
 
 A stop statement requires a clock signal, a halt condition signal that has a single bit unsigned integer type, and an integer exit code.
 
+For clocked statements that have side effects in the environment (stop, print, and verification
+statements), the order of execution of any such statements that are triggered on the same clock edge
+is determined by their syntactic order in the enclosing module. The order of execution of clocked,
+side-effect-having statements in different modules or with different clocks that trigger
+concurrently is undefined.
+
+The stop statement has an optional name attribute which can be used to
+attach metadata to the statement. The name is part of the module level
+namespace. However it can never be used in a reference since it is not of
+any valid type.
+
 \begin{lstlisting}
 wire clk:Clock
 wire halt:UInt<1>
-stop(clk,halt,42)
+stop(clk,halt,42) : optional_name
 ...
 \end{lstlisting}
 
@@ -994,12 +1006,20 @@ The formatted print statement is used to print a formatted string during simulat
 
 A printf statement requires a clock signal, a print condition signal, a format string, and a variable list of argument signals. The condition signal must be a single bit unsigned integer type, and the argument signals must each have a ground type.
 
+For information about execution ordering of clocked statements with observable environmental side
+effects, see section \ref{stop_stmt}.
+
+The printf statement has an optional name attribute which can be used to
+attach metadata to the statement. The name is part of the module level
+namespace. However it can never be used in a reference since it is not of
+any valid type.
+
 \begin{lstlisting}
 wire clk:Clock
 wire condition:UInt<1>
 wire a:UInt
 wire b:UInt
-printf(clk, condition, "a in hex: %x, b in decimal:%d.\n", a, b)
+printf(clk, condition, "a in hex: %x, b in decimal:%d.\n", a, b) : optional_name
 ...
 \end{lstlisting}
 
@@ -1023,6 +1043,59 @@ Format strings support the following escape characters:
 \item \verb|\"| : Double quote
 \item \verb|\'| : Single quote
 \end{itemize}
+
+\subsection{Verification}
+
+To facilitate simulation, model checking and formal methods, there are three non-synthesizable verification statements available: assert, assume and cover. Each type of verification statement requires a clock signal, a predicate signal, an enable signal and an explanatory message string literal. The predicate and enable signals must have single bit unsigned integer type. When an assert is violated the explanatory message may be issued as guidance. The explanatory message may be phrased as if prefixed by the words ``Verifies that...''.
+
+Backends are free to generate the corresponding model checking constructs in the target language, but this is not required by the FIRRTL specification. Backends that do not generate such constructs should issue a warning. For example, the SystemVerilog emitter produces SystemVerilog assert, assume and cover statements, but the Verilog emitter does not and instead warns the user if any verification statements are encountered.
+
+For information about execution ordering of clocked statements with observable environmental side
+effects, see section \ref{stop_stmt}.
+
+Any verification statement has an optional name attribute which can be used to
+attach metadata to the statement. The name is part of the module level
+namespace. However it can never be used in a reference since it is not of
+any valid type.
+
+\subsubsection{Assert}
+
+The assert statement verifies that the predicate is true on the rising edge of any clock cycle when the enable is true. In other words, it verifies that enable implies predicate.
+
+\begin{lstlisting}
+wire clk:Clock
+wire pred:UInt<1>
+wire en:UInt<1>
+pred <= eq(X, Y)
+en <= Z_valid
+assert(clk, pred, en, "X equals Y when Z is valid") : optional_name
+\end{lstlisting}
+
+\subsubsection{Assume}
+
+The assume statement directs the model checker to disregard any states where the enable is true and the predicate is not true at the rising edge of the clock cycle. In other words, it reduces the states to be checked to only those where enable implies predicate is true by definition. In simulation, assume is treated as an assert.
+
+\begin{lstlisting}
+wire clk:Clock
+wire pred:UInt<1>
+wire en:UInt<1>
+pred <= eq(X, Y)
+en <= Z_valid
+assume(clk, pred, en, "X equals Y when Z is valid") : optional_name
+\end{lstlisting}
+
+\subsubsection{Cover}
+
+The cover statement verifies that the predicate is true on the rising edge of some clock cycle when the enable is true. In other words, it directs the model checker to find some way to make enable implies predicate true at some time step.
+
+\begin{lstlisting}
+wire clk:Clock
+wire pred:UInt<1>
+wire en:UInt<1>
+pred <= eq(X, Y)
+en <= Z_valid
+cover(clk, pred, en, "X equals Y when Z is valid") : optional_name
+\end{lstlisting}
 
 \section{Expressions}
 
@@ -1834,7 +1907,7 @@ The width of the integer literal expressions is detailed in their respective sec
   \egroup
 \end{figure}
 
-\section{Namespaces}
+\section{Namespaces} \label{namespaces}
 
 All modules in a circuit exist in the same module namespace, and thus must all have a unique name.
 
@@ -1987,23 +2060,26 @@ circuit Foo :
        b <= not(a)
 \end{lstlisting}
 
-All circuits, modules, ports and statements can optionally be followed with the info token \verb|@[fileinfo]| where fileinfo is a string containing the source file information from where it was generated.
+All circuits, modules, ports and statements can optionally be followed with the info token \verb|@[fileinfo]|
+where fileinfo is a string containing the source file information from where it was generated.
+The following characters need to be escaped with a leading `\verb|\|':
+`\verb|\n|' (new line), `\verb|\t|' (tab), `\verb|]|' and `\verb|\|' itself.
 
 The following example shows the info tokens included:
 
 \begin{lstlisting}
-circuit Top : @["myfile.txt: 14, 8"]
-   module Top : @["myfile.txt: 15, 2"]
-     output out:UInt @["myfile.txt: 16, 3"]
-     input b:UInt<32> @["myfile.txt: 17, 3"]
-     input c:UInt<1> @["myfile.txt: 18, 3"]
-     input d:UInt<16> @["myfile.txt: 19, 3"]
-     wire a:UInt @["myfile.txt: 21, 8"]
-     when c : @["myfile.txt: 24, 8"]
-       a <= b @["myfile.txt: 27, 16"]
+circuit Top : @[myfile.txt 14:8]
+   module Top : @[myfile.txt 15:2]
+     output out:UInt @[myfile.txt 16:3]
+     input b:UInt<32> @[myfile.txt 17:3]
+     input c:UInt<1> @[myfile.txt 18:3]
+     input d:UInt<16> @[myfile.txt 19:3]
+     wire a:UInt @[myfile.txt 21:8]
+     when c : @[myfile.txt 24:8]
+       a <= b @[myfile.txt 27:16]
      else :
-       a <= d @["myfile.txt: 29, 17"]
-     out <= add(a,a) @["myfile.txt: 34, 4"]
+       a <= d @[myfile.txt 29:17]
+     out <= add(a,a) @[myfile.txt 34:4]
 \end{lstlisting}
 
 \section{FIRRTL Language Definition}
@@ -2047,8 +2123,8 @@ The concrete syntax of FIRRTL is defined in section \ref{syntax_tree}. Productio
                 &\pipe &\pd{exp} \vv{is invalid} \opt{\pd{info}}                                               &\text{Invalidate}\\
                 &\pipe &\vv{attach}\vv{(}\rpt{\pd{exp}}\vv{)} \opt{\pd{info}}                                  &\text{Attach}\\
                 &\pipe &\vv{when} \pd{exp} \vv{:} \opt{\pd{info}} \pd{stmt} \opt{\vv{else} \vv{:} \pd{stmt}}   &\text{Conditional}\\
-                &\pipe &\vv{stop(}\pd{exp}, \pd{exp}, \pd{int})\opt{\pd{info}}                                 &\text{Stop}\\
-                &\pipe &\vv{printf(}\pd{exp}, \pd{exp}, \pd{string}, \rpt{\pd{exp}}\vv{)} \opt{\pd{info}}      &\text{Printf}\\
+                &\pipe &\vv{stop(}\pd{exp}, \pd{exp}, \pd{int}) \opt{\vv{:}\pd{id}} \opt{\pd{info}}            &\text{Stop}\\
+                &\pipe &\vv{printf(}\pd{exp}, \pd{exp}, \pd{string}, \rpt{\pd{exp}}\vv{)} \opt{\vv{:}\pd{id}} \opt{\pd{info}}  &\text{Printf}\\
                 &\pipe &\vv{skip} \opt{\pd{info}}                                                              &\text{Empty}\\
                 &\pipe &\vv{(}\rpt{\pd{stmt}}\vv{)}                                                            &\text{Statement Group}\\
 \pd{ruw}        &=     &\vv{old} \pipe \vv{ new} \pipe \vv{ undefined}                                         &\text{Read Under Write Flag}\\

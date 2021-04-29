@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtlTests.annotationTests
 
@@ -6,24 +6,25 @@ import firrtl._
 import firrtl.annotations.{Annotation, CircuitTarget, CompleteTarget, DeletedAnnotation}
 import firrtl.annotations.transforms.{DupedResult, ResolvePaths}
 import firrtl.transforms.DedupedResult
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should._
 
-class MorphismSpec extends FlatSpec with Matchers {
+class MorphismSpec extends AnyFlatSpec with Matchers {
 
   object AnAnnotation {
     def apply(target: CompleteTarget) = new AnAnnotation(Some(target))
   }
 
   case class AnAnnotation(
-                           target: Option[CompleteTarget],
-                           from: Option[AnAnnotation] = None,
-                           cause: Option[String] = None
-                         ) extends Annotation {
+    target: Option[CompleteTarget],
+    from:   Option[AnAnnotation] = None,
+    cause:  Option[String] = None)
+      extends Annotation {
     override def update(renames: RenameMap): Seq[AnAnnotation] = {
       if (target.isDefined) {
         renames.get(target.get) match {
-          case None => Seq(this)
-          case Some(Seq()) => Seq(AnAnnotation(None, Some(this)))
+          case None          => Seq(this)
+          case Some(Seq())   => Seq(AnAnnotation(None, Some(this)))
           case Some(targets) =>
             //TODO: Add cause of renaming, requires FIRRTL change to RenameMap
             targets.map { t => AnAnnotation(Some(t), Some(this)) }
@@ -59,7 +60,7 @@ class MorphismSpec extends FlatSpec with Matchers {
       val annotationsx = a.annotations.filter {
         case a: DeletedAnnotation => false
         case AnAnnotation(None, _, _) => false
-        case _: DupedResult => false
+        case _: DupedResult   => false
         case _: DedupedResult => false
         case _ => true
       }
@@ -295,8 +296,7 @@ class MorphismSpec extends FlatSpec with Matchers {
       )
   }
 
-
-  behavior of "EliminateTargetPaths"
+  behavior.of("EliminateTargetPaths")
 
   // NOTE: equivalience is defined structurally in this case
   trait RightInverseEliminateTargetsFixture extends RightInverseFixture with DefaultExample {
@@ -392,24 +392,29 @@ class MorphismSpec extends FlatSpec with Matchers {
          |    inst qux of Baz___Top_qux""".stripMargin
     override val annotations: AnnotationSeq = Seq(
       AnAnnotation(CircuitTarget("Top").module("Baz").instOf("foo", "Foo")),
-      ResolvePaths(Seq(
-        CircuitTarget("Top").module("Top").instOf("baz", "Baz").instOf("foo", "Foo"),
-        CircuitTarget("Top").module("Top").instOf("baz", "Baz").instOf("foox", "Foo"),
-        CircuitTarget("Top").module("Top").instOf("baz", "Baz").instOf("bar", "Bar"),
-        CircuitTarget("Top").module("Top").instOf("qux", "Baz").instOf("foo", "Foo"),
-        CircuitTarget("Top").module("Top").instOf("qux", "Baz").instOf("foox", "Foo"),
-        CircuitTarget("Top").module("Top").instOf("qux", "Baz").instOf("bar", "Bar")
-      ))
+      ResolvePaths(
+        Seq(
+          CircuitTarget("Top").module("Top").instOf("baz", "Baz").instOf("foo", "Foo"),
+          CircuitTarget("Top").module("Top").instOf("baz", "Baz").instOf("foox", "Foo"),
+          CircuitTarget("Top").module("Top").instOf("baz", "Baz").instOf("bar", "Bar"),
+          CircuitTarget("Top").module("Top").instOf("qux", "Baz").instOf("foo", "Foo"),
+          CircuitTarget("Top").module("Top").instOf("qux", "Baz").instOf("foox", "Foo"),
+          CircuitTarget("Top").module("Top").instOf("qux", "Baz").instOf("bar", "Bar")
+        )
+      )
     )
 
-    override val finalAnnotations: Option[AnnotationSeq] = Some(Seq(
-      AnAnnotation(CircuitTarget("Top").module("Foo___Top_qux_foo")),
-      AnAnnotation(CircuitTarget("Top").module("Foo___Top_baz_foo"))
-    ))
+    override val finalAnnotations: Option[AnnotationSeq] = Some(
+      Seq(
+        AnAnnotation(CircuitTarget("Top").module("Foo___Top_qux_foo")),
+        AnAnnotation(CircuitTarget("Top").module("Foo___Top_baz_foo"))
+      )
+    )
     test()
   }
 
   it should "be idempotent with per-module annotations" in new IdempotencyEliminateTargetsFixture {
+
     /** An endomorphism */
     override val annotations: AnnotationSeq =
       allModuleInstances.map(AnAnnotation.apply) :+ ResolvePaths(allAbsoluteInstances)
@@ -417,6 +422,7 @@ class MorphismSpec extends FlatSpec with Matchers {
   }
 
   it should "be idempotent with per-instance annotations" in new IdempotencyEliminateTargetsFixture {
+
     /** An endomorphism */
     override val annotations: AnnotationSeq =
       allAbsoluteInstances.map(AnAnnotation.apply) :+ ResolvePaths(allAbsoluteInstances)
@@ -424,13 +430,14 @@ class MorphismSpec extends FlatSpec with Matchers {
   }
 
   it should "be idempotent with relative module annotations" in new IdempotencyEliminateTargetsFixture {
+
     /** An endomorphism */
     override val annotations: AnnotationSeq =
       allRelative2LevelInstances.map(AnAnnotation.apply) :+ ResolvePaths(allAbsoluteInstances)
     test()
   }
 
-  behavior of "DedupModules"
+  behavior.of("DedupModules")
 
   trait RightInverseDedupModulesFixture extends RightInverseFixture with DefaultExample {
     override val f: Seq[Transform] = Seq(new firrtl.annotations.transforms.EliminateTargetPaths)
@@ -497,24 +504,29 @@ class MorphismSpec extends FlatSpec with Matchers {
          |    inst qux of Baz""".stripMargin
     override val annotations: AnnotationSeq = Seq(
       AnAnnotation(CircuitTarget("Top").module("Baz").instOf("foo", "Foo")),
-      ResolvePaths(Seq(
-        CircuitTarget("Top").module("Top").instOf("baz", "Baz").instOf("foo", "Foo"),
-        CircuitTarget("Top").module("Top").instOf("baz", "Baz").instOf("foox", "Foo"),
-        CircuitTarget("Top").module("Top").instOf("baz", "Baz").instOf("bar", "Bar"),
-        CircuitTarget("Top").module("Top").instOf("qux", "Baz").instOf("foo", "Foo"),
-        CircuitTarget("Top").module("Top").instOf("qux", "Baz").instOf("foox", "Foo"),
-        CircuitTarget("Top").module("Top").instOf("qux", "Baz").instOf("bar", "Bar")
-      ))
+      ResolvePaths(
+        Seq(
+          CircuitTarget("Top").module("Top").instOf("baz", "Baz").instOf("foo", "Foo"),
+          CircuitTarget("Top").module("Top").instOf("baz", "Baz").instOf("foox", "Foo"),
+          CircuitTarget("Top").module("Top").instOf("baz", "Baz").instOf("bar", "Bar"),
+          CircuitTarget("Top").module("Top").instOf("qux", "Baz").instOf("foo", "Foo"),
+          CircuitTarget("Top").module("Top").instOf("qux", "Baz").instOf("foox", "Foo"),
+          CircuitTarget("Top").module("Top").instOf("qux", "Baz").instOf("bar", "Bar")
+        )
+      )
     )
 
-    override val finalAnnotations: Option[AnnotationSeq] = Some(Seq(
-      AnAnnotation(CircuitTarget("Top").module("Top").instOf("baz", "Baz").instOf("foo", "Foo")),
-      AnAnnotation(CircuitTarget("Top").module("Top").instOf("qux", "Baz").instOf("foo", "Foo"))
-    ))
+    override val finalAnnotations: Option[AnnotationSeq] = Some(
+      Seq(
+        AnAnnotation(CircuitTarget("Top").module("Top").instOf("baz", "Baz").instOf("foo", "Foo")),
+        AnAnnotation(CircuitTarget("Top").module("Top").instOf("qux", "Baz").instOf("foo", "Foo"))
+      )
+    )
     test()
   }
 
   it should "be idempotent with per-module annotations" in new IdempotencyDedupModulesFixture {
+
     /** An endomorphism */
     override val annotations: AnnotationSeq =
       allModuleInstances.map(AnAnnotation.apply) :+ ResolvePaths(allAbsoluteInstances)
@@ -522,6 +534,7 @@ class MorphismSpec extends FlatSpec with Matchers {
   }
 
   it should "be idempotent with per-instance annotations" in new IdempotencyDedupModulesFixture {
+
     /** An endomorphism */
     override val annotations: AnnotationSeq =
       allAbsoluteInstances.map(AnAnnotation.apply) :+ ResolvePaths(allAbsoluteInstances)
@@ -529,6 +542,7 @@ class MorphismSpec extends FlatSpec with Matchers {
   }
 
   it should "be idempotent with relative module annotations" in new IdempotencyDedupModulesFixture {
+
     /** An endomorphism */
     override val annotations: AnnotationSeq =
       allRelative2LevelInstances.map(AnAnnotation.apply) :+ ResolvePaths(allAbsoluteInstances)

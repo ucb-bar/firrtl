@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 syntax = "proto3";
 
 package firrtl;
@@ -188,6 +190,25 @@ message Firrtl {
       Expression en = 4;
     }
 
+    enum Formal {
+      ASSERT = 0;
+      ASSUME = 1;
+      COVER = 2;
+    }
+
+    message Verification {
+      // Required.
+      Formal op = 1;
+      // Required.
+      Expression clk = 2;
+      // Required.
+      Expression cond = 3;
+      // Required.
+      Expression en = 4;
+      // Required.
+      string msg = 5;
+    }
+
     message Skip {
       // Empty
     }
@@ -255,6 +276,7 @@ message Firrtl {
       IsInvalid is_invalid = 17;
       MemoryPort memory_port = 18;
       Attach attach = 20;
+      Verification verification = 21;
     }
 
     SourceInfo source_info = 19;

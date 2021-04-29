@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl
 package passes
@@ -15,7 +15,7 @@ object RemoveEmpty extends Pass with DependencyAPIMigration {
 
   private def onModule(m: DefModule): DefModule = {
     m match {
-      case m: Module => Module(m.info, m.name, m.ports, Utils.squashEmpty(m.body))
+      case m: Module    => Module(m.info, m.name, m.ports, Utils.squashEmpty(m.body))
       case m: ExtModule => m
     }
   }

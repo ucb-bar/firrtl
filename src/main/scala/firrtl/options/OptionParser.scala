@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl.options
 
@@ -9,9 +9,10 @@ import scopt.OptionParser
 case object OptionsHelpException extends Exception("Usage help invoked")
 
 /** OptionParser mixin that causes the OptionParser to not call exit (call `sys.exit`) if the `--help` option is
-  * passed */
+  * passed
+  */
 trait DoNotTerminateOnExit { this: OptionParser[_] =>
-  override def terminate(exitState: Either[String, Unit]): Unit = Unit
+  override def terminate(exitState: Either[String, Unit]): Unit = ()
 }
 
 /** OptionParser mixin that converts to [[OptionsException]]
@@ -28,21 +29,23 @@ trait ExceptOnError { this: OptionParser[_] =>
   */
 trait DuplicateHandling extends OptionParser[AnnotationSeq] {
 
-  override def parse(args: Seq[String], init: AnnotationSeq): Option[AnnotationSeq] = {
+  override def parse(args: scala.collection.Seq[String], init: AnnotationSeq): Option[AnnotationSeq] = {
 
     /** Message for found duplicate options */
     def msg(x: String, y: String) = s"""Duplicate $x "$y" (did your custom Transform or OptionsManager add this?)"""
 
-    val longDups = options.map(_.name).groupBy(identity).collect{ case (k, v) if v.size > 1 && k != "" => k }
-    val shortDups = options.map(_.shortOpt).flatten.groupBy(identity).collect{ case (k, v) if v.size > 1 => k }
+    val longDups = options.map(_.name).groupBy(identity).collect { case (k, v) if v.size > 1 && k != "" => k }
+    val shortDups = options.map(_.shortOpt).flatten.groupBy(identity).collect { case (k, v) if v.size > 1 => k }
 
-
-    if (longDups.nonEmpty)  {
+    if (longDups.nonEmpty) {
       throw new OptionsException(msg("long option", longDups.map("--" + _).mkString(",")), new IllegalArgumentException)
     }
 
     if (shortDups.nonEmpty) {
-      throw new OptionsException(msg("short option", shortDups.map("-" + _).mkString(",")), new IllegalArgumentException)
+      throw new OptionsException(
+        msg("short option", shortDups.map("-" + _).mkString(",")),
+        new IllegalArgumentException
+      )
     }
 
     super.parse(args, init)

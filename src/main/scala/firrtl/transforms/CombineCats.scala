@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl
 package transforms
@@ -8,32 +9,37 @@ import firrtl.PrimOps._
 import firrtl.WrappedExpression._
 import firrtl.annotations.NoTargetAnnotation
 import firrtl.options.Dependency
+import firrtl.stage.PrettyNoExprInlining
 
 import scala.collection.mutable
 
 case class MaxCatLenAnnotation(maxCatLen: Int) extends NoTargetAnnotation
 
 object CombineCats {
+
   /** Mapping from references to the [[firrtl.ir.Expression Expression]]s that drive them paired with their Cat length */
   type Netlist = mutable.HashMap[WrappedExpression, (Int, Expression)]
 
   def expandCatArgs(maxCatLen: Int, netlist: Netlist)(expr: Expression): (Int, Expression) = expr match {
-    case cat@DoPrim(Cat, args, _, _) =>
+    case cat @ DoPrim(Cat, args, _, _) =>
       val (a0Len, a0Expanded) = expandCatArgs(maxCatLen - 1, netlist)(args.head)
       val (a1Len, a1Expanded) = expandCatArgs(maxCatLen - a0Len, netlist)(args(1))
       (a0Len + a1Len, cat.copy(args = Seq(a0Expanded, a1Expanded)).asInstanceOf[Expression])
     case other =>
-      netlist.get(we(expr)).collect {
-        case (len, cat@DoPrim(Cat, _, _, _)) if maxCatLen >= len => expandCatArgs(maxCatLen, netlist)(cat)
-      }.getOrElse((1, other))
+      netlist
+        .get(we(expr))
+        .collect {
+          case (len, cat @ DoPrim(Cat, _, _, _)) if maxCatLen >= len => expandCatArgs(maxCatLen, netlist)(cat)
+        }
+        .getOrElse((1, other))
   }
 
   def onStmt(maxCatLen: Int, netlist: Netlist)(stmt: Statement): Statement = {
     stmt.map(onStmt(maxCatLen, netlist)) match {
-      case node@DefNode(_, name, value) =>
+      case node @ DefNode(_, name, value) =>
         val catLenAndVal = value match {
-          case cat@DoPrim(Cat, _, _, _) => expandCatArgs(maxCatLen, netlist)(cat)
-          case other => (1, other)
+          case cat @ DoPrim(Cat, _, _, _) => expandCatArgs(maxCatLen, netlist)(cat)
+          case other                      => (1, other)
         }
         netlist(we(WRef(name))) = catLenAndVal
         node.copy(value = catLenAndVal._2)
@@ -55,27 +61,34 @@ object CombineCats {
 class CombineCats extends Transform with DependencyAPIMigration {
 
   override def prerequisites = firrtl.stage.Forms.LowForm ++
-    Seq( Dependency(passes.RemoveValidIf),
-         Dependency[firrtl.transforms.ConstantPropagation],
-         Dependency(firrtl.passes.memlib.VerilogMemDelays),
-         Dependency(firrtl.passes.SplitExpressions) )
+    Seq(
+      Dependency(passes.RemoveValidIf),
+      Dependency[firrtl.transforms.ConstantPropagation],
+      Dependency(firrtl.passes.memlib.VerilogMemDelays),
+      Dependency(firrtl.passes.SplitExpressions)
+    )
 
   override def optionalPrerequisites = Seq.empty
 
-  override def optionalPrerequisiteOf = Seq(
-    Dependency[SystemVerilogEmitter],
-    Dependency[VerilogEmitter] )
+  override def optionalPrerequisiteOf = Seq(Dependency[SystemVerilogEmitter], Dependency[VerilogEmitter])
 
   override def invalidates(a: Transform) = false
 
   val defaultMaxCatLen = 10
 
   def execute(state: CircuitState): CircuitState = {
-    val maxCatLen = state.annotations.collectFirst {
-      case m: MaxCatLenAnnotation => m.maxCatLen
-    }.getOrElse(defaultMaxCatLen)
+    val run = !state.annotations.contains(PrettyNoExprInlining)
 
-    val modulesx = state.circuit.modules.map(CombineCats.onMod(maxCatLen))
-    state.copy(circuit = state.circuit.copy(modules = modulesx))
+    if (run) {
+      val maxCatLen = state.annotations.collectFirst {
+        case m: MaxCatLenAnnotation => m.maxCatLen
+      }.getOrElse(defaultMaxCatLen)
+
+      val modulesx = state.circuit.modules.map(CombineCats.onMod(maxCatLen))
+      state.copy(circuit = state.circuit.copy(modules = modulesx))
+    } else {
+      logger.info(s"--${PrettyNoExprInlining.longOption} specified, skipping...")
+      state
+    }
   }
 }

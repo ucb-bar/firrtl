@@ -1,11 +1,10 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtlTests.stage.phases
 
-
 import firrtl.stage._
 
-import firrtl.{AnnotationSeq, ChirrtlEmitter, EmitAllModulesAnnotation, NoneCompiler}
+import firrtl.{AnnotationSeq, ChirrtlEmitter, EmitAllModulesAnnotation}
 import firrtl.options.{OptionsException, OutputAnnotationFileAnnotation, Phase}
 import firrtl.stage.phases.Checks
 import org.scalatest.flatspec.AnyFlatSpec
@@ -19,15 +18,15 @@ class ChecksSpec extends AnyFlatSpec with Matchers {
   val outputFile = OutputFileAnnotation("bar")
   val emitAllModules = EmitAllModulesAnnotation(classOf[ChirrtlEmitter])
   val outputAnnotationFile = OutputAnnotationFileAnnotation("baz")
-  val goodCompiler = CompilerAnnotation(new NoneCompiler())
+  val goodCompiler = RunFirrtlTransformAnnotation(new ChirrtlEmitter)
   val infoMode = InfoModeAnnotation("ignore")
 
   val min = Seq(inputFile, goodCompiler, infoMode)
 
   def checkExceptionMessage(phase: Phase, annotations: AnnotationSeq, messageStart: String): Unit =
-    intercept[OptionsException]{ phase.transform(annotations) }.getMessage should startWith(messageStart)
+    intercept[OptionsException] { phase.transform(annotations) }.getMessage should startWith(messageStart)
 
-  behavior of classOf[Checks].toString
+  behavior.of(classOf[Checks].toString)
 
   it should "require exactly one input source" in new Fixture {
     info("0 input source causes an exception")
@@ -55,15 +54,15 @@ class ChecksSpec extends AnyFlatSpec with Matchers {
     checkExceptionMessage(phase, in, "No more than one output file can be specified")
   }
 
-  it should "enforce exactly one compiler" in new Fixture {
+  it should "enforce one or more compilers (at this point these are emitters)" in new Fixture {
     info("0 compilers should throw an exception")
     val inZero = Seq(inputFile, infoMode)
-    checkExceptionMessage(phase, inZero, "Exactly one compiler must be specified, but none found")
+    checkExceptionMessage(phase, inZero, "At least one compiler must be specified")
 
-    info("2 compilers should throw an exception")
-    val c = goodCompiler.compiler
+    info("2 compilers should not throw an exception")
+    val c = goodCompiler
     val inTwo = min :+ goodCompiler
-    checkExceptionMessage(phase, inTwo, s"Exactly one compiler must be specified, but found '$c, $c'")
+    phase.transform(inTwo)
   }
 
   it should "validate info mode names" in new Fixture {
@@ -74,8 +73,11 @@ class ChecksSpec extends AnyFlatSpec with Matchers {
 
   it should "enforce exactly one info mode" in new Fixture {
     info("0 info modes should throw an exception")
-    checkExceptionMessage(phase, Seq(inputFile, goodCompiler),
-                          "Exactly one info mode must be specified, but none found")
+    checkExceptionMessage(
+      phase,
+      Seq(inputFile, goodCompiler),
+      "Exactly one info mode must be specified, but none found"
+    )
 
     info("2 info modes should throw an exception")
     val i = infoMode.modeName

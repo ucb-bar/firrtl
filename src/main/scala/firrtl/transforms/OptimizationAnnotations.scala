@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl
 package transforms
@@ -7,6 +8,9 @@ import firrtl.passes.PassException
 
 /** Indicate that DCE should not be run */
 case object NoDCEAnnotation extends NoTargetAnnotation
+
+/** Indicate that ConstantPropagation should not be run */
+case object NoConstantPropagationAnnotation extends NoTargetAnnotation
 
 /** Lets an annotation mark its ReferenceTarget members as DontTouch
   *
@@ -34,17 +38,19 @@ trait DontTouchAllTargets extends HasDontTouches { self: Annotation =>
   * DCE treats the component as a top-level sink of the circuit
   */
 case class DontTouchAnnotation(target: ReferenceTarget)
-    extends SingleTargetAnnotation[ReferenceTarget] with DontTouchAllTargets {
+    extends SingleTargetAnnotation[ReferenceTarget]
+    with DontTouchAllTargets {
   def targets = Seq(target)
   def duplicate(n: ReferenceTarget) = this.copy(n)
 }
 
 object DontTouchAnnotation {
-  class DontTouchNotFoundException(module: String, component: String) extends PassException(
-    s"""|Target marked dontTouch ($module.$component) not found!
-        |It was probably accidentally deleted. Please check that your custom transforms are not responsible and then
-        |file an issue on GitHub: https://github.com/freechipsproject/firrtl/issues/new""".stripMargin
-  )
+  class DontTouchNotFoundException(module: String, component: String)
+      extends PassException(
+        s"""|Target marked dontTouch ($module.$component) not found!
+            |It was probably accidentally deleted. Please check that your custom transforms are not responsible and then
+            |file an issue on GitHub: https://github.com/freechipsproject/firrtl/issues/new""".stripMargin
+      )
 
   def errorNotFound(module: String, component: String) =
     throw new DontTouchNotFoundException(module, component)
@@ -58,7 +64,6 @@ object DontTouchAnnotation {
   *
   * @note Unlike [[DontTouchAnnotation]], we don't care if the annotation is deleted
   */
-case class OptimizableExtModuleAnnotation(target: ModuleName) extends
-    SingleTargetAnnotation[ModuleName] {
+case class OptimizableExtModuleAnnotation(target: ModuleName) extends SingleTargetAnnotation[ModuleName] {
   def duplicate(n: ModuleName) = this.copy(n)
 }

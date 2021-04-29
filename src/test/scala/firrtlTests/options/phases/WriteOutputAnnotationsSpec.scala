@@ -1,13 +1,23 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtlTests.options.phases
-
 
 import java.io.File
 
 import firrtl.AnnotationSeq
 import firrtl.annotations.{DeletedAnnotation, NoTargetAnnotation}
-import firrtl.options.{InputAnnotationFileAnnotation, OutputAnnotationFileAnnotation, Phase, WriteDeletedAnnotation}
+import firrtl.options.{
+  CustomFileEmission,
+  InputAnnotationFileAnnotation,
+  OutputAnnotationFileAnnotation,
+  Phase,
+  PhaseException,
+  StageOption,
+  StageOptions,
+  TargetDirAnnotation,
+  WriteDeletedAnnotation
+}
+import firrtl.options.Viewer.view
 import firrtl.options.phases.{GetIncludes, WriteOutputAnnotations}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -28,65 +38,79 @@ class WriteOutputAnnotationsSpec extends AnyFlatSpec with Matchers with firrtl.t
     info(s"reading '$f' works")
     val read = (new GetIncludes)
       .transform(Seq(InputAnnotationFileAnnotation(f.toString)))
-      .filterNot{
+      .filterNot {
         case a @ DeletedAnnotation(_, _: InputAnnotationFileAnnotation) => true
-        case _                                                          => false }
+        case _ => false
+      }
 
     info(s"annotations in file are expected size")
-    read.size should be (a.size)
+    read.size should be(a.size)
 
     read
       .zip(a)
-      .foreach{ case (read, expected) =>
-        info(s"$read matches")
-        read should be (expected) }
+      .foreach {
+        case (read, expected) =>
+          info(s"$read matches")
+          read should be(expected)
+      }
 
     f.delete()
   }
 
   class Fixture { val phase: Phase = new WriteOutputAnnotations }
 
-  behavior of classOf[WriteOutputAnnotations].toString
+  behavior.of(classOf[WriteOutputAnnotations].toString)
 
-  it should "write annotations to a file (excluding DeletedAnnotations)" in new Fixture {
+  it should "write annotations to a file (excluding DeletedAnnotations and StageOptions)" in new Fixture {
     val file = new File(dir + "/should-write-annotations-to-a-file.anno.json")
-    val annotations = Seq( OutputAnnotationFileAnnotation(file.toString),
-                           WriteOutputAnnotationsSpec.FooAnnotation,
-                           WriteOutputAnnotationsSpec.BarAnnotation(0),
-                           WriteOutputAnnotationsSpec.BarAnnotation(1),
-                           DeletedAnnotation("foo", WriteOutputAnnotationsSpec.FooAnnotation) )
+    val annotations = Seq(
+      OutputAnnotationFileAnnotation(file.toString),
+      WriteOutputAnnotationsSpec.FooAnnotation,
+      WriteOutputAnnotationsSpec.BarAnnotation(0),
+      WriteOutputAnnotationsSpec.BarAnnotation(1),
+      DeletedAnnotation("foo", WriteOutputAnnotationsSpec.FooAnnotation)
+    )
     val expected = annotations.filter {
-      case a: DeletedAnnotation => false
-      case a => true
+      case _: DeletedAnnotation => false
+      case _: StageOption       => false
+      case _ => true
     }
     val out = phase.transform(annotations)
 
-    info("annotations are unmodified")
-    out.toSeq should be (annotations)
+    info("annotations should be as expected")
+    out.toSeq should be(annotations)
 
     fileContainsAnnotations(file, expected)
   }
 
   it should "include DeletedAnnotations if a WriteDeletedAnnotation is present" in new Fixture {
     val file = new File(dir + "should-include-deleted.anno.json")
-    val annotations = Seq( OutputAnnotationFileAnnotation(file.toString),
-                           WriteOutputAnnotationsSpec.FooAnnotation,
-                           WriteOutputAnnotationsSpec.BarAnnotation(0),
-                           WriteOutputAnnotationsSpec.BarAnnotation(1),
-                           DeletedAnnotation("foo", WriteOutputAnnotationsSpec.FooAnnotation),
-                           WriteDeletedAnnotation )
+    val annotations = Seq(
+      OutputAnnotationFileAnnotation(file.toString),
+      WriteOutputAnnotationsSpec.FooAnnotation,
+      WriteOutputAnnotationsSpec.BarAnnotation(0),
+      WriteOutputAnnotationsSpec.BarAnnotation(1),
+      DeletedAnnotation("foo", WriteOutputAnnotationsSpec.FooAnnotation),
+      WriteDeletedAnnotation
+    )
     val out = phase.transform(annotations)
 
     info("annotations are unmodified")
-    out.toSeq should be (annotations)
+    out.toSeq should be(annotations)
 
-    fileContainsAnnotations(file, annotations)
+    val expected = annotations.filter {
+      case _: StageOption => false
+      case _ => true
+    }
+    fileContainsAnnotations(file, expected)
   }
 
   it should "do nothing if no output annotation file is specified" in new Fixture {
-    val annotations = Seq( WriteOutputAnnotationsSpec.FooAnnotation,
-                           WriteOutputAnnotationsSpec.BarAnnotation(0),
-                           WriteOutputAnnotationsSpec.BarAnnotation(1) )
+    val annotations = Seq(
+      WriteOutputAnnotationsSpec.FooAnnotation,
+      WriteOutputAnnotationsSpec.BarAnnotation(0),
+      WriteOutputAnnotationsSpec.BarAnnotation(1)
+    )
 
     val out = catchWrites { phase.transform(annotations) } match {
       case Right(a) =>
@@ -97,12 +121,98 @@ class WriteOutputAnnotationsSpec extends AnyFlatSpec with Matchers with firrtl.t
     }
 
     info("annotations are unmodified")
-    out.toSeq should be (annotations)
+    out.toSeq should be(annotations)
+  }
+
+  it should "write CustomFileEmission annotations" in new Fixture {
+    val file = new File("write-CustomFileEmission-annotations.anno.json")
+    val annotations = Seq(
+      TargetDirAnnotation(dir),
+      OutputAnnotationFileAnnotation(file.toString),
+      WriteOutputAnnotationsSpec.Custom("hello!")
+    )
+    val serializedFileName = view[StageOptions](annotations).getBuildFileName("Custom", Some(".Emission"))
+    val expected = annotations.flatMap {
+      case _: WriteOutputAnnotationsSpec.Custom => Some(WriteOutputAnnotationsSpec.Replacement(serializedFileName))
+      case _: StageOption                       => None
+      case a => Some(a)
+    }
+
+    val out = phase.transform(annotations)
+
+    info("annotations are unmodified")
+    out.toSeq should be(annotations)
+
+    fileContainsAnnotations(new File(dir, file.toString), expected)
+
+    info(s"file '$serializedFileName' exists")
+    new File(serializedFileName) should (exist)
+  }
+
+  it should "support CustomFileEmission to binary files" in new Fixture {
+    val file = new File("write-CustomFileEmission-binary-files.anno.json")
+    val data = Array[Byte](0x0a, 0xa0.toByte)
+    val annotations = Seq(
+      TargetDirAnnotation(dir),
+      OutputAnnotationFileAnnotation(file.toString),
+      WriteOutputAnnotationsSpec.Binary(data)
+    )
+
+    val serializedFileName = view[StageOptions](annotations).getBuildFileName("Binary", Some(".Emission"))
+    val out = phase.transform(annotations)
+
+    info(s"file '$serializedFileName' exists")
+    new File(serializedFileName) should (exist)
+
+    info(s"file '$serializedFileName' is correct")
+    val inputStream = new java.io.FileInputStream(serializedFileName)
+    val result = new Array[Byte](2)
+    inputStream.read(result)
+    result should equal(data)
+  }
+
+  it should "error if multiple annotations try to write to the same file" in new Fixture {
+    val file = new File("write-CustomFileEmission-annotations-error.anno.json")
+    val annotations = Seq(
+      TargetDirAnnotation(dir),
+      OutputAnnotationFileAnnotation(file.toString),
+      WriteOutputAnnotationsSpec.Custom("foo"),
+      WriteOutputAnnotationsSpec.Custom("bar")
+    )
+    intercept[PhaseException] {
+      phase.transform(annotations)
+    }.getMessage should startWith("Multiple CustomFileEmission annotations")
   }
 
 }
 
 private object WriteOutputAnnotationsSpec {
+
   case object FooAnnotation extends NoTargetAnnotation
+
   case class BarAnnotation(x: Int) extends NoTargetAnnotation
+
+  case class Custom(value: String) extends NoTargetAnnotation with CustomFileEmission {
+
+    override protected def baseFileName(a: AnnotationSeq): String = "Custom"
+
+    override protected def suffix: Option[String] = Some(".Emission")
+
+    override def getBytes: Iterable[Byte] = value.getBytes
+
+    override def replacements(file: File): AnnotationSeq = Seq(Replacement(file.toString))
+
+  }
+
+  case class Binary(value: Array[Byte]) extends NoTargetAnnotation with CustomFileEmission {
+
+    override protected def baseFileName(a: AnnotationSeq): String = "Binary"
+
+    override protected def suffix: Option[String] = Some(".Emission")
+
+    override def getBytes: Iterable[Byte] = value
+  }
+
+  case class Replacement(file: String) extends NoTargetAnnotation
+
 }

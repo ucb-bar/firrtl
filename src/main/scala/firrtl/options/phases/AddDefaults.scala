@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl.options.phases
 
@@ -12,14 +12,14 @@ import firrtl.options.{Dependency, Phase, TargetDirAnnotation}
   */
 class AddDefaults extends Phase {
 
-  override def prerequisites = Seq(Dependency[GetIncludes], Dependency[ConvertLegacyAnnotations])
+  override def prerequisites = Seq(Dependency[GetIncludes])
 
   override def optionalPrerequisiteOf = Seq.empty
 
   override def invalidates(a: Phase) = false
 
   def transform(annotations: AnnotationSeq): AnnotationSeq = {
-    val td = annotations.collectFirst{ case a: TargetDirAnnotation => a}.isEmpty
+    val td = annotations.collectFirst { case a: TargetDirAnnotation => a }.isEmpty
 
     (if (td) Seq(TargetDirAnnotation()) else Seq()) ++
       annotations

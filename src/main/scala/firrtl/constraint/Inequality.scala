@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl.constraint
 
@@ -6,9 +6,9 @@ package firrtl.constraint
   * Is passed to the constraint solver to resolve
   */
 trait Inequality {
-  def left: String
+  def left:  String
   def right: Constraint
-  def geq: Boolean
+  def geq:   Boolean
 }
 
 case class GreaterOrEqual(left: String, right: Constraint) extends Inequality {
@@ -20,5 +20,3 @@ case class LesserOrEqual(left: String, right: Constraint) extends Inequality {
   val geq = false
   override def toString: String = s"$left <= ${right.serialize}"
 }
-
-

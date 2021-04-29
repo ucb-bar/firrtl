@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl
 package transforms
@@ -6,6 +6,7 @@ package transforms
 import firrtl.ir._
 import firrtl.Mappers._
 import firrtl.annotations._
+import firrtl.options.Dependency
 import firrtl.passes._
 import firrtl.passes.memlib._
 import firrtl.stage.Forms
@@ -21,9 +22,12 @@ import ResolveMaskGranularity._
 class SimplifyMems extends Transform with DependencyAPIMigration {
 
   override def prerequisites = Forms.MidForm
-  override def optionalPrerequisites = Seq.empty
+  override def optionalPrerequisites = Seq(Dependency[InferReadWrite])
   override def optionalPrerequisiteOf = Forms.MidEmitters
-  override def invalidates(a: Transform) = false
+  override def invalidates(a: Transform) = a match {
+    case InferTypes => true
+    case _          => false
+  }
 
   def onModule(c: Circuit, renames: RenameMap)(m: DefModule): DefModule = {
     val moduleNS = Namespace(m)
@@ -33,12 +37,13 @@ class SimplifyMems extends Transform with DependencyAPIMigration {
 
     def onExpr(e: Expression): Expression = e.map(onExpr) match {
       case wr @ WRef(name, _, MemKind, _) if memAdapters.contains(name) => wr.copy(kind = WireKind)
-      case e => e
+      case e                                                            => e
     }
 
     def simplifyMem(mem: DefMemory): Statement = {
       val adapterDecl = DefWire(mem.info, mem.name, memType(mem))
-      val simpleMemDecl = mem.copy(name = moduleNS.newName(s"${mem.name}_flattened"), dataType = flattenType(mem.dataType))
+      val simpleMemDecl =
+        mem.copy(name = moduleNS.newName(s"${mem.name}_flattened"), dataType = flattenType(mem.dataType))
       val oldRT = mTarget.ref(mem.name)
       val adapterConnects = memType(simpleMemDecl).fields.flatMap {
         case Field(pName, Flip, pType: BundleType) =>
@@ -63,8 +68,10 @@ class SimplifyMems extends Transform with DependencyAPIMigration {
 
     def canSimplify(mem: DefMemory) = mem.dataType match {
       case at: AggregateType =>
-        val wMasks = mem.writers.map(w => getMaskBits(connects, memPortField(mem, w, "en"), memPortField(mem, w, "mask")))
-        val rwMasks = mem.readwriters.map(w => getMaskBits(connects, memPortField(mem, w, "wmode"), memPortField(mem, w, "wmask")))
+        val wMasks =
+          mem.writers.map(w => getMaskBits(connects, memPortField(mem, w, "en"), memPortField(mem, w, "mask")))
+        val rwMasks =
+          mem.readwriters.map(w => getMaskBits(connects, memPortField(mem, w, "wmode"), memPortField(mem, w, "wmask")))
         (wMasks ++ rwMasks).flatten.isEmpty
       case _ => false
     }

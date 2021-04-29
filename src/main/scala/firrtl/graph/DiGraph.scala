@@ -1,10 +1,10 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl.graph
 
-import scala.collection.{Set, Map}
-import scala.collection.mutable
-import scala.collection.mutable.{LinkedHashSet, LinkedHashMap}
+import scala.collection.{mutable, Map, Set}
+import scala.collection.mutable.{LinkedHashMap, LinkedHashSet}
+import firrtl.options.DependencyManagerUtils.{CharSet, PrettyCharSet}
 
 /** An exception that is raised when an assumed DAG has a cycle */
 class CyclicException(val node: Any) extends Exception(s"No valid linearization for cyclic graph, found at $node")
@@ -14,11 +14,12 @@ class PathNotFoundException extends Exception("Unreachable node")
 
 /** A companion to create DiGraphs from mutable data */
 object DiGraph {
+
   /** Create a DiGraph from a MutableDigraph, representing the same graph */
   def apply[T](mdg: MutableDiGraph[T]): DiGraph[T] = mdg
 
   /** Create a DiGraph from a Map[T,Set[T]] of edge data */
-  def apply[T](edgeData: Map[T,Set[T]]): DiGraph[T] = {
+  def apply[T](edgeData: Map[T, Set[T]]): DiGraph[T] = {
     val edgeDataCopy = new LinkedHashMap[T, LinkedHashSet[T]]
     for ((k, v) <- edgeData) {
       edgeDataCopy(k) = new LinkedHashSet[T]
@@ -31,10 +32,21 @@ object DiGraph {
     }
     new DiGraph(edgeDataCopy)
   }
+
+  /** Create a DiGraph from edges */
+  def apply[T](edges: (T, T)*): DiGraph[T] = {
+    val edgeMap = new LinkedHashMap[T, LinkedHashSet[T]]
+    for ((from, to) <- edges) {
+      val set = edgeMap.getOrElseUpdate(from, new LinkedHashSet[T])
+      set += to
+    }
+    new DiGraph(edgeMap)
+  }
 }
 
 /** Represents common behavior of all directed graphs */
-class DiGraph[T] private[graph] (private[graph] val edges: LinkedHashMap[T, LinkedHashSet[T]]) {
+class DiGraph[T](private[graph] val edges: LinkedHashMap[T, LinkedHashSet[T]]) {
+
   /** Check whether the graph contains vertex v */
   def contains(v: T): Boolean = edges.contains(v)
 
@@ -75,8 +87,7 @@ class DiGraph[T] private[graph] (private[graph] val edges: LinkedHashMap[T, Link
       try {
         foundPath = path(vertex, node, blacklist = Set.empty)
         true
-      }
-      catch {
+      } catch {
         case _: PathNotFoundException =>
           foundPath = Seq.empty[T]
           false
@@ -139,7 +150,7 @@ class DiGraph[T] private[graph] (private[graph] val edges: LinkedHashMap[T, Link
     * @return a Map[T,T] from each visited node to its predecessor in the
     * traversal
     */
-  def BFS(root: T): Map[T,T] = BFS(root, Set.empty[T])
+  def BFS(root: T): Map[T, T] = BFS(root, Set.empty[T])
 
   /** Performs breadth-first search on the directed graph, with a blacklist of nodes
     *
@@ -148,12 +159,12 @@ class DiGraph[T] private[graph] (private[graph] val edges: LinkedHashMap[T, Link
     * @return a Map[T,T] from each visited node to its predecessor in the
     * traversal
     */
-  def BFS(root: T, blacklist: Set[T]): Map[T,T] = {
-    val prev = new mutable.LinkedHashMap[T,T]
+  def BFS(root: T, blacklist: Set[T]): Map[T, T] = {
+    val prev = new mutable.LinkedHashMap[T, T]
     val queue = new mutable.Queue[T]
     queue.enqueue(root)
     while (queue.nonEmpty) {
-      val u = queue.dequeue
+      val u = queue.dequeue()
       for (v <- getEdges(u)) {
         if (!prev.contains(v) && !blacklist.contains(v)) {
           prev(v) = u
@@ -182,13 +193,15 @@ class DiGraph[T] private[graph] (private[graph] val edges: LinkedHashMap[T, Link
     * @param blacklist list of nodes to stop searching, if encountered
     * @return a Set[T] of nodes reachable from `root`
     */
-  def reachableFrom(root: T, blacklist: Set[T]): LinkedHashSet[T] = new LinkedHashSet[T] ++ BFS(root, blacklist).map({ case (k, v) => k })
+  def reachableFrom(root: T, blacklist: Set[T]): LinkedHashSet[T] = new LinkedHashSet[T] ++ BFS(root, blacklist).map({
+    case (k, v) => k
+  })
 
   /** Finds a path (if one exists) from one node to another
     *
     * @param start the start node
     * @param end the destination node
-    * @throws PathNotFoundException
+    * @throws firrtl.graph.PathNotFoundException
     * @return a Seq[T] of nodes defining an arbitrary valid path
     */
   def path(start: T, end: T): Seq[T] = path(start, end, Set.empty[T])
@@ -198,7 +211,7 @@ class DiGraph[T] private[graph] (private[graph] val edges: LinkedHashMap[T, Link
     * @param start the start node
     * @param end the destination node
     * @param blacklist list of nodes which break path, if encountered
-    * @throws PathNotFoundException
+    * @throws firrtl.graph.PathNotFoundException
     * @return a Seq[T] of nodes defining an arbitrary valid path
     */
   def path(start: T, end: T, blacklist: Set[T]): Seq[T] = {
@@ -239,7 +252,7 @@ class DiGraph[T] private[graph] (private[graph] val edges: LinkedHashMap[T, Link
     val callStack = new mutable.Stack[StrongConnectFrame[T]]
 
     for (node <- getVertices) {
-      callStack.push(new StrongConnectFrame(node,getEdges(node).iterator))
+      callStack.push(new StrongConnectFrame(node, getEdges(node).iterator))
       while (!callStack.isEmpty) {
         val frame = callStack.top
         val v = frame.v
@@ -255,10 +268,10 @@ class DiGraph[T] private[graph] (private[graph] val edges: LinkedHashMap[T, Link
         }
         frame.childCall = None
         while (frame.edgeIter.hasNext && frame.childCall.isEmpty) {
-          val w = frame.edgeIter.next
+          val w = frame.edgeIter.next()
           if (!indices.contains(w)) {
             frame.childCall = Some(w)
-            callStack.push(new StrongConnectFrame(w,getEdges(w).iterator))
+            callStack.push(new StrongConnectFrame(w, getEdges(w).iterator))
           } else if (onstack.contains(w)) {
             lowlinks(v) = lowlinks(v).min(indices(w))
           }
@@ -267,14 +280,13 @@ class DiGraph[T] private[graph] (private[graph] val edges: LinkedHashMap[T, Link
           if (lowlinks(v) == indices(v)) {
             val scc = new mutable.ArrayBuffer[T]
             do {
-              val w = stack.pop
+              val w = stack.pop()
               onstack -= w
               scc += w
-            }
-            while (scc.last != v);
+            } while (scc.last != v);
             sccs.append(scc.toSeq)
           }
-          callStack.pop
+          callStack.pop()
         }
       }
     }
@@ -292,7 +304,7 @@ class DiGraph[T] private[graph] (private[graph] val edges: LinkedHashMap[T, Link
     * @param start the node to start at
     * @return a Map[T,Seq[Seq[T]]] where the value associated with v is the Seq of all paths from start to v
     */
-  def pathsInDAG(start: T): LinkedHashMap[T,Seq[Seq[T]]] = {
+  def pathsInDAG(start: T): LinkedHashMap[T, Seq[Seq[T]]] = {
     // paths(v) holds the set of paths from start to v
     val paths = new LinkedHashMap[T, mutable.Set[Seq[T]]]
     val queue = new mutable.Queue[T]
@@ -300,33 +312,36 @@ class DiGraph[T] private[graph] (private[graph] val edges: LinkedHashMap[T, Link
     def addBinding(n: T, p: Seq[T]): Unit = {
       paths.getOrElseUpdate(n, new LinkedHashSet[Seq[T]]) += p
     }
-    addBinding(start,Seq(start))
+    addBinding(start, Seq(start))
     queue += start
     queue ++= linearize.filter(reachable.contains(_))
     while (!queue.isEmpty) {
-      val current = queue.dequeue
+      val current = queue.dequeue()
       for (v <- getEdges(current)) {
         for (p <- paths(current)) {
           addBinding(v, p :+ v)
         }
       }
     }
-    paths.map({ case (k,v) => (k,v.toSeq) })
+    paths.map({ case (k, v) => (k, v.toSeq) })
   }
 
   /** Returns a graph with all edges reversed */
   def reverse: DiGraph[T] = {
     val mdg = new MutableDiGraph[T]
     edges.foreach({ case (u, edges) => mdg.addVertex(u) })
-    edges.foreach({ case (u, edges) =>
-      edges.foreach(v => mdg.addEdge(v,u))
+    edges.foreach({
+      case (u, edges) =>
+        edges.foreach(v => mdg.addEdge(v, u))
     })
     DiGraph(mdg)
   }
 
   private def filterEdges(vprime: Set[T]): LinkedHashMap[T, LinkedHashSet[T]] = {
-    def filterNodeSet(s: LinkedHashSet[T]): LinkedHashSet[T] = s.filter({ case (k) => vprime.contains(k) })
-    def filterAdjacencyLists(m: LinkedHashMap[T, LinkedHashSet[T]]): LinkedHashMap[T, LinkedHashSet[T]] = m.map({ case (k, v) => (k, filterNodeSet(v)) })
+    def filterNodeSet(s:        LinkedHashSet[T]): LinkedHashSet[T] = s.filter({ case (k) => vprime.contains(k) })
+    def filterAdjacencyLists(m: LinkedHashMap[T, LinkedHashSet[T]]): LinkedHashMap[T, LinkedHashSet[T]] = m.map({
+      case (k, v) => (k, filterNodeSet(v))
+    })
     val eprime: LinkedHashMap[T, LinkedHashSet[T]] = edges.filter({ case (k, v) => vprime.contains(k) })
     filterAdjacencyLists(eprime)
   }
@@ -336,7 +351,7 @@ class DiGraph[T] private[graph] (private[graph] val edges: LinkedHashMap[T, Link
     * Any edge including a deleted node will be deleted
     *
     * @param vprime the Set[T] of desired vertices
-    * @throws scala.IllegalArgumentException if vprime is not a subset of V
+    * @throws java.lang.IllegalArgumentException if vprime is not a subset of V
     * @return the subgraph
     */
   def subgraph(vprime: Set[T]): DiGraph[T] = {
@@ -350,12 +365,12 @@ class DiGraph[T] private[graph] (private[graph] val edges: LinkedHashMap[T, Link
     * transformed into an edge (u,v).
     *
     * @param vprime the Set[T] of desired vertices
-    * @throws scala.IllegalArgumentException if vprime is not a subset of V
+    * @throws java.lang.IllegalArgumentException if vprime is not a subset of V
     * @return the simplified graph
     */
   def simplify(vprime: Set[T]): DiGraph[T] = {
     require(vprime.subsetOf(edges.keySet))
-    val pathEdges = vprime.map( v => (v, reachableFrom(v) & (vprime-v)) )
+    val pathEdges = vprime.map(v => (v, reachableFrom(v) & (vprime - v)))
     new DiGraph(new LinkedHashMap[T, LinkedHashSet[T]] ++ pathEdges)
   }
 
@@ -382,9 +397,45 @@ class DiGraph[T] private[graph] (private[graph] val edges: LinkedHashMap[T, Link
     that.edges.foreach({ case (k, v) => eprime.getOrElseUpdate(k, new LinkedHashSet[T]) ++= v })
     new DiGraph(eprime)
   }
+
+  /** Serializes a `DiGraph[String]` as a pretty tree
+    *
+    * Multiple roots are supported, but cycles are not.
+    */
+  def prettyTree(charSet: CharSet = PrettyCharSet)(implicit ev: T =:= String): String = {
+    // Set up characters for building the tree
+    val (l, n, c) = (charSet.lastNode, charSet.notLastNode, charSet.continuation)
+    val ctab = " " * c.size + " "
+
+    // Recursively adds each node of the DiGraph to accumulating List[String]
+    // Uses List because prepend is cheap and this prevents quadratic behavior of String
+    //   concatenations or even flatMapping on Seqs
+    def rec(tab: String, node: T, mark: String, prev: List[String]): List[String] = {
+      val here = s"$mark$node"
+      val children = this.getEdges(node)
+      val last = children.size - 1
+      children.toList // Convert LinkedHashSet to List to avoid determinism issues
+        .zipWithIndex // Find last
+        .foldLeft(here :: prev) {
+          case (acc, (nodex, idx)) =>
+            val nextTab = if (idx == last) tab + ctab else tab + c + " "
+            val nextMark = if (idx == last) tab + l else tab + n
+            rec(nextTab, nodex, nextMark + " ", acc)
+        }
+    }
+    this.findSources.toList // Convert LinkedHashSet to List to avoid determinism issues
+      .sortBy(_.toString) // Make order deterministic
+      .foldLeft(Nil: List[String]) {
+        case (acc, root) => rec("", root, "", acc)
+      }
+      .reverse
+      .mkString("\n")
+  }
+
 }
 
 class MutableDiGraph[T] extends DiGraph[T](new LinkedHashMap[T, LinkedHashSet[T]]) {
+
   /** Add vertex v to the graph
     * @return v, the added vertex
     */
@@ -394,7 +445,7 @@ class MutableDiGraph[T] extends DiGraph[T](new LinkedHashMap[T, LinkedHashSet[T]
   }
 
   /** Add edge (u,v) to the graph.
-    * @throws scala.IllegalArgumentException if u and/or v is not in the graph
+    * @throws java.lang.IllegalArgumentException if u and/or v is not in the graph
     */
   def addEdge(u: T, v: T): Unit = {
     require(contains(u))

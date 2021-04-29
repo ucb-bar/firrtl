@@ -1,4 +1,5 @@
-circuit RightShiftTester : 
+; SPDX-License-Identifier: Apache-2.0
+circuit RightShiftTester :
   module RightShift : 
     input clock : Clock
     input reset : UInt<1>
@@ -37,8 +38,8 @@ circuit RightShiftTester :
     dut.clock <= clock
     dut.reset <= reset
     reg T_6 : UInt<2>, clock with : (reset => (reset, UInt<2>("h00")))
+    node T_8 = eq(T_6, UInt<2>("h03"))
     when UInt<1>("h01") :
-      node T_8 = eq(T_6, UInt<2>("h03"))
       node T_10 = and(UInt<1>("h00"), T_8)
       node T_13 = add(T_6, UInt<1>("h01"))
       node T_14 = tail(T_13, 1)

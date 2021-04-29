@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl
 package transforms
@@ -18,8 +18,7 @@ import scala.collection.{immutable, mutable}
 object RemoveReset extends Transform with DependencyAPIMigration {
 
   override def prerequisites = firrtl.stage.Forms.MidForm ++
-    Seq( Dependency(passes.LowerTypes),
-         Dependency(passes.Legalize) )
+    Seq(Dependency(passes.LowerTypes), Dependency(passes.Legalize))
 
   override def optionalPrerequisites = Seq.empty
 
@@ -30,7 +29,7 @@ object RemoveReset extends Transform with DependencyAPIMigration {
     case _                          => false
   }
 
-  private case class Reset(cond: Expression, value: Expression)
+  private case class Reset(cond: Expression, value: Expression, info: Info)
 
   /** Return an immutable set of all invalid expressions in a module
     * @param m a module
@@ -58,15 +57,17 @@ object RemoveReset extends Transform with DependencyAPIMigration {
           reg.copy(reset = Utils.zero, init = WRef(reg))
         case reg @ DefRegister(_, rname, _, _, Utils.zero, _) =>
           reg.copy(init = WRef(reg)) // canonicalize
-        case reg @ DefRegister(_, rname, _, _, reset, init) if reset.tpe != AsyncResetType =>
+        case reg @ DefRegister(info, rname, _, _, reset, init) if reset.tpe != AsyncResetType =>
           // Add register reset to map
-          resets(rname) = Reset(reset, init)
+          resets(rname) = Reset(reset, init, info)
           reg.copy(reset = Utils.zero, init = WRef(reg))
         case Connect(info, ref @ WRef(rname, _, RegKind, _), expr) if resets.contains(rname) =>
           val reset = resets(rname)
           val muxType = Utils.mux_type_and_widths(reset.value, expr)
-          Connect(info, ref, Mux(reset.cond, reset.value, expr, muxType))
-        case other => other map onStmt
+          // Use reg source locator for mux enable and true value since that's where they're defined
+          val infox = MultiInfo(reset.info, reset.info, info)
+          Connect(infox, ref, Mux(reset.cond, reset.value, expr, muxType))
+        case other => other.map(onStmt)
       }
     }
     m.map(onStmt)

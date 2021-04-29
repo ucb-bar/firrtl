@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtlTests
 
@@ -10,8 +10,7 @@ import firrtl.testutils._
 import firrtl.testutils.FirrtlCheckers._
 
 class InferReadWriteSpec extends SimpleTransformSpec {
-  class InferReadWriteCheckException extends PassException(
-    "Readwrite ports are not found!")
+  class InferReadWriteCheckException extends PassException("Readwrite ports are not found!")
 
   object InferReadWriteCheck extends Pass {
     override def prerequisites = Forms.MidForm
@@ -23,18 +22,18 @@ class InferReadWriteSpec extends SimpleTransformSpec {
       case s: DefMemory if s.readLatency > 0 && s.readwriters.size == 1 =>
         s.name == "mem" && s.readwriters.head == "rw"
       case s: Block =>
-        s.stmts exists findReadWrite
+        s.stmts.exists(findReadWrite)
       case _ => false
     }
 
-    def run (c: Circuit) = {
+    def run(c: Circuit) = {
       val errors = new Errors
-      val foundReadWrite = c.modules exists {
-        case m: Module => findReadWrite(m.body)
+      val foundReadWrite = c.modules.exists {
+        case m: Module    => findReadWrite(m.body)
         case m: ExtModule => false
       }
       if (!foundReadWrite) {
-        errors append new InferReadWriteCheckException
+        errors.append(new InferReadWriteCheckException)
         errors.trigger
       }
       c
@@ -176,6 +175,57 @@ circuit sram6t :
     val annos = Seq(memlib.InferReadWriteAnnotation)
     val res = compileAndEmit(CircuitState(parse(input), ChirrtlForm, annos))
     // Check correctness of firrtl
-    res should containLine (s"mem.rw.wmode <= wen")
+    res should containLine(s"mem.rw.wmode <= wen")
   }
+
+  def sameAddr(ruw: String): String = {
+    s"""
+       |circuit sram6t :
+       |  module sram6t :
+       |    input clock : Clock
+       |    output io : { flip addr : UInt<11>, flip valid : UInt<1>, flip write : UInt<1>, flip dataIn : UInt<32>, dataOut : UInt<32>}
+       |
+       |    mem mem:
+       |      data-type => UInt<4>
+       |      depth => 64
+       |      reader => r
+       |      writer => w
+       |      read-latency => 1
+       |      write-latency => 1
+       |      read-under-write => ${ruw}
+       |
+       |    mem.r.clk <= clock
+       |    mem.r.addr <= io.addr
+       |    mem.r.en <= io.valid
+       |    io.dataOut <= mem.r.data
+       |
+       |    node wen = and(io.valid, io.write)
+       |    mem.w.clk <= clock
+       |    mem.w.addr <= io.addr
+       |    mem.w.en <= wen
+       |    mem.w.mask <= UInt(1)
+       |    mem.w.data <= io.dataIn""".stripMargin
+  }
+
+  "Infer ReadWrite Ports" should "infer readwrite ports from shared addresses with undefined readUnderWrite" in {
+    val input = sameAddr("undefined")
+    val annos = Seq(memlib.InferReadWriteAnnotation)
+    val res = compileAndEmit(CircuitState(parse(input), HighForm, annos))
+    // Check correctness of firrtl
+    res should containLine(s"mem.rw.wmode <= wen")
+  }
+
+  Seq("old", "new").foreach { ruw =>
+    "Infer ReadWrite Ports" should s"not infer readwrite ports from shared addresses with '${ruw}' readUnderWrite" in {
+      val input = sameAddr(ruw)
+      val annos = Seq(memlib.InferReadWriteAnnotation)
+      intercept[Exception] {
+        compileAndEmit(CircuitState(parse(input), ChirrtlForm, annos))
+      } match {
+        case CustomTransformException(_: InferReadWriteCheckException) => // success
+        case _ => fail()
+      }
+    }
+  }
+
 }

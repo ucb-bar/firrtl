@@ -1,4 +1,4 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl
 
@@ -8,12 +8,11 @@ import java.io.Writer
 import scala.collection.mutable
 import scala.util.Try
 import scala.util.control.NonFatal
-
 import firrtl.annotations._
 import firrtl.ir.Circuit
 import firrtl.Utils.throwInternalError
 import firrtl.annotations.transforms.{EliminateTargetPaths, ResolvePaths}
-import firrtl.options.{DependencyAPI, Dependency, StageUtils, TransformLike}
+import firrtl.options.{Dependency, DependencyAPI, StageUtils, TransformLike}
 import firrtl.stage.Forms
 
 /** Container of all annotations for a Firrtl compiler */
@@ -34,19 +33,22 @@ object AnnotationSeq {
   *   Generally only a return value from [[Transform]]s
   */
 case class CircuitState(
-    circuit: Circuit,
-    form: CircuitForm,
-    annotations: AnnotationSeq,
-    renames: Option[RenameMap]) {
+  circuit:     Circuit,
+  form:        CircuitForm,
+  annotations: AnnotationSeq,
+  renames:     Option[RenameMap]) {
 
   /** Helper for getting just an emitted circuit */
   def emittedCircuitOption: Option[EmittedCircuit] =
-    emittedComponents collectFirst { case x: EmittedCircuit => x }
+    emittedComponents.collectFirst { case x: EmittedCircuit => x }
+
   /** Helper for getting an [[EmittedCircuit]] when it is known to exist */
   def getEmittedCircuit: EmittedCircuit = emittedCircuitOption match {
     case Some(emittedCircuit) => emittedCircuit
     case None =>
-      throw new FirrtlInternalException(s"No EmittedCircuit found! Did you delete any annotations?\n$deletedAnnotations")
+      throw new FirrtlInternalException(
+        s"No EmittedCircuit found! Did you delete any annotations?\n$deletedAnnotations"
+      )
   }
 
   /** Helper function for extracting emitted components from annotations */
@@ -64,7 +66,7 @@ case class CircuitState(
   def resolvePaths(targets: Seq[CompleteTarget]): CircuitState = targets match {
     case Nil => this
     case _ =>
-      val newCS = new EliminateTargetPaths().runTransform(this.copy(annotations = ResolvePaths(targets) +: annotations ))
+      val newCS = new EliminateTargetPaths().runTransform(this.copy(annotations = ResolvePaths(targets) +: annotations))
       newCS.copy(form = form)
   }
 
@@ -73,8 +75,8 @@ case class CircuitState(
     * @return
     */
   def resolvePathsOf(annoClasses: Class[_]*): CircuitState = {
-    val targets = getAnnotationsOf(annoClasses:_*).flatMap(_.getTargets)
-    if(targets.nonEmpty) resolvePaths(targets.flatMap{_.getComplete}) else this
+    val targets = getAnnotationsOf(annoClasses: _*).flatMap(_.getTargets)
+    if (targets.nonEmpty) resolvePaths(targets.flatMap { _.getComplete }) else this
   }
 
   /** Returns all annotations which are of a class in annoClasses
@@ -105,7 +107,8 @@ object CircuitState {
   */
 @deprecated(
   "Mix-in the DependencyAPIMigration trait into your Transform and specify its Dependency API dependencies. See: https://bit.ly/2Voppre",
-  "FIRRTL 1.3")
+  "FIRRTL 1.3"
+)
 sealed abstract class CircuitForm(private val value: Int) extends Ordered[CircuitForm] {
   // Note that value is used only to allow comparisons
   def compare(that: CircuitForm): Int = this.value - that.value
@@ -113,8 +116,15 @@ sealed abstract class CircuitForm(private val value: Int) extends Ordered[Circui
   /** Defines a suffix to use if this form is written to a file */
   def outputSuffix: String
 }
+private[firrtl] object CircuitForm {
+  // Private internal utils to reduce number of deprecation warnings
+  val ChirrtlForm = firrtl.ChirrtlForm
+  val HighForm = firrtl.HighForm
+  val MidForm = firrtl.MidForm
+  val LowForm = firrtl.LowForm
+  val UnknownForm = firrtl.UnknownForm
+}
 
-// scalastyle:off magic.number
 // These magic numbers give an ordering to CircuitForm
 /** Chirrtl Form
   *
@@ -126,7 +136,8 @@ sealed abstract class CircuitForm(private val value: Int) extends Ordered[Circui
   */
 @deprecated(
   "Mix-in the DependencyAPIMigration trait into your Transform and specify its Dependency API dependencies. See: https://bit.ly/2Voppre",
-  "FIRRTL 1.3")
+  "FIRRTL 1.3"
+)
 final case object ChirrtlForm extends CircuitForm(value = 3) {
   val outputSuffix: String = ".fir"
 }
@@ -140,7 +151,8 @@ final case object ChirrtlForm extends CircuitForm(value = 3) {
   */
 @deprecated(
   "Mix-in the DependencyAPIMigration trait into your Transform and specify its Dependency API dependencies. See: https://bit.ly/2Voppre",
-  "FIRRTL 1.3")
+  "FIRRTL 1.3"
+)
 final case object HighForm extends CircuitForm(2) {
   val outputSuffix: String = ".hi.fir"
 }
@@ -154,7 +166,8 @@ final case object HighForm extends CircuitForm(2) {
   */
 @deprecated(
   "Mix-in the DependencyAPIMigration trait into your Transform and specify its Dependency API dependencies. See: https://bit.ly/2Voppre",
-  "FIRRTL 1.3")
+  "FIRRTL 1.3"
+)
 final case object MidForm extends CircuitForm(1) {
   val outputSuffix: String = ".mid.fir"
 }
@@ -167,7 +180,8 @@ final case object MidForm extends CircuitForm(1) {
   */
 @deprecated(
   "Mix-in the DependencyAPIMigration trait into your Transform and specify its Dependency API dependencies. See: https://bit.ly/2Voppre",
-  "FIRRTL 1.3")
+  "FIRRTL 1.3"
+)
 final case object LowForm extends CircuitForm(0) {
   val outputSuffix: String = ".lo.fir"
 }
@@ -185,45 +199,34 @@ final case object LowForm extends CircuitForm(0) {
   */
 @deprecated(
   "Mix-in the DependencyAPIMigration trait into your Transform and specify its Dependency API dependencies. See: https://bit.ly/2Voppre",
-  "FIRRTL 1.3")
+  "FIRRTL 1.3"
+)
 final case object UnknownForm extends CircuitForm(-1) {
   override def compare(that: CircuitForm): Int = { sys.error("Illegal to compare UnknownForm"); 0 }
 
   val outputSuffix: String = ".unknown.fir"
 }
-// scalastyle:on magic.number
 
 // Internal utilities to keep code DRY, not a clean interface
 private[firrtl] object Transform {
 
-  // Run transform with logging
-  def runTransform(name: String, mk: => CircuitState, logger: Logger): CircuitState = {
-    logger.info(s"======== Starting Transform $name ========")
-
-    val (timeMillis, result) = Utils.time(mk)
-
-    logger.info(s"""----------------------------${"-" * name.size}---------\n""")
-    logger.info(f"Time: $timeMillis%.1f ms")
-
-    result
-  }
-
   def remapAnnotations(name: String, before: CircuitState, after: CircuitState, logger: Logger): CircuitState = {
     val remappedAnnotations = propagateAnnotations(name, logger, before.annotations, after.annotations, after.renames)
 
-    logger.info(s"Form: ${after.form}")
     logger.trace(s"Annotations:")
     logger.trace {
-      JsonProtocol.serializeTry(remappedAnnotations).recoverWith {
-        case NonFatal(e) =>
-          val msg = s"Exception thrown during Annotation serialization:\n  " +
-                    e.toString.replaceAll("\n", "\n  ")
-          Try(msg)
-      }.get
+      JsonProtocol
+        .serializeTry(remappedAnnotations)
+        .recoverWith {
+          case NonFatal(e) =>
+            val msg = s"Exception thrown during Annotation serialization:\n  " +
+              e.toString.replaceAll("\n", "\n  ")
+            Try(msg)
+        }
+        .get
     }
 
     logger.trace(s"Circuit:\n${after.circuit.serialize}")
-    logger.info(s"======== Finished Transform $name ========\n")
 
     CircuitState(after.circuit, after.form, remappedAnnotations, None)
   }
@@ -236,17 +239,18 @@ private[firrtl] object Transform {
     * @return the updated annotations
     */
   def propagateAnnotations(
-      name: String,
-      logger: Logger,
-      inAnno: AnnotationSeq,
-      resAnno: AnnotationSeq,
-      renameOpt: Option[RenameMap]): AnnotationSeq = {
+    name:      String,
+    logger:    Logger,
+    inAnno:    AnnotationSeq,
+    resAnno:   AnnotationSeq,
+    renameOpt: Option[RenameMap]
+  ): AnnotationSeq = {
     val newAnnotations = {
       val inSet = mutable.LinkedHashSet() ++ inAnno
       val resSet = mutable.LinkedHashSet() ++ resAnno
       val deleted = (inSet -- resSet).map {
         case DeletedAnnotation(xFormName, delAnno) => DeletedAnnotation(s"$xFormName+$name", delAnno)
-        case anno => DeletedAnnotation(name, anno)
+        case anno                                  => DeletedAnnotation(name, anno)
       }
       val created = resSet -- inSet
       val unchanged = resSet & inSet
@@ -262,7 +266,7 @@ private[firrtl] object Transform {
       remappedAnnos.foreach { remapped =>
         val set = remapped2original.getOrElseUpdate(remapped, mutable.LinkedHashSet.empty[Annotation])
         set += anno
-        if(set.size > 1) keysOfNote += remapped
+        if (set.size > 1) keysOfNote += remapped
       }
       remappedAnnos
     }.toSeq
@@ -282,15 +286,11 @@ trait Transform extends TransformLike[CircuitState] with DependencyAPI[Transform
   def name: String = this.getClass.getName
 
   /** The [[firrtl.CircuitForm]] that this transform requires to operate on */
-  @deprecated(
-    "Use Dependency API methods for equivalent functionality. See: https://bit.ly/2Voppre",
-    "FIRRTL 1.3")
+  @deprecated("Use Dependency API methods for equivalent functionality. See: https://bit.ly/2Voppre", "FIRRTL 1.3")
   def inputForm: CircuitForm
 
   /** The [[firrtl.CircuitForm]] that this transform outputs */
-  @deprecated(
-    "Use Dependency API methods for equivalent functionality. See: https://bit.ly/2Voppre",
-    "FIRRTL 1.3")
+  @deprecated("Use Dependency API methods for equivalent functionality. See: https://bit.ly/2Voppre", "FIRRTL 1.3")
   def outputForm: CircuitForm
 
   /** Perform the transform, encode renaming with RenameMap, and can
@@ -304,7 +304,7 @@ trait Transform extends TransformLike[CircuitState] with DependencyAPI[Transform
 
   def transform(state: CircuitState): CircuitState = execute(state)
 
-  import firrtl.{ChirrtlForm => C, HighForm => H, MidForm => M, LowForm => L, UnknownForm => U}
+  import firrtl.CircuitForm.{ChirrtlForm => C, HighForm => H, MidForm => M, LowForm => L, UnknownForm => U}
 
   override def prerequisites: Seq[Dependency[Transform]] = inputForm match {
     case C => Nil
@@ -315,7 +315,7 @@ trait Transform extends TransformLike[CircuitState] with DependencyAPI[Transform
   }
 
   override def optionalPrerequisites: Seq[Dependency[Transform]] = inputForm match {
-    case L => Forms.LowFormOptimized
+    case L => Forms.LowFormOptimized ++ Forms.AssertsRemoved
     case _ => Seq.empty
   }
 
@@ -326,8 +326,9 @@ trait Transform extends TransformLike[CircuitState] with DependencyAPI[Transform
       Dependency[SystemVerilogEmitter] :: Nil
 
     val emitters = inputForm match {
-      case C => Dependency[ChirrtlEmitter]      :: Dependency[HighFirrtlEmitter]   :: Dependency[MiddleFirrtlEmitter] :: lowEmitters
-      case H => Dependency[HighFirrtlEmitter]   :: Dependency[MiddleFirrtlEmitter] :: lowEmitters
+      case C =>
+        Dependency[ChirrtlEmitter] :: Dependency[HighFirrtlEmitter] :: Dependency[MiddleFirrtlEmitter] :: lowEmitters
+      case H => Dependency[HighFirrtlEmitter] :: Dependency[MiddleFirrtlEmitter] :: lowEmitters
       case M => Dependency[MiddleFirrtlEmitter] :: lowEmitters
       case L => lowEmitters
       case U => Nil
@@ -336,9 +337,9 @@ trait Transform extends TransformLike[CircuitState] with DependencyAPI[Transform
     val selfDep = Dependency.fromTransform(this)
 
     inputForm match {
-      case C => (fullCompilerSet                           ++ emitters - selfDep).toSeq
-      case H => (fullCompilerSet -- Forms.Deduped          ++ emitters - selfDep).toSeq
-      case M => (fullCompilerSet -- Forms.MidForm          ++ emitters - selfDep).toSeq
+      case C => (fullCompilerSet ++ emitters - selfDep).toSeq
+      case H => (fullCompilerSet -- Forms.Deduped ++ emitters - selfDep).toSeq
+      case M => (fullCompilerSet -- Forms.MidForm ++ emitters - selfDep).toSeq
       case L => (fullCompilerSet -- Forms.LowFormOptimized ++ emitters - selfDep).toSeq
       case U => Nil
     }
@@ -349,25 +350,13 @@ trait Transform extends TransformLike[CircuitState] with DependencyAPI[Transform
 
   override def invalidates(a: Transform): Boolean = {
     (inputForm, outputForm) match {
-      case (U, _) | (_, U)  => true  // invalidate everything
+      case (U, _) | (_, U)  => true // invalidate everything
       case (i, o) if i >= o => false // invalidate nothing
-      case (_, C)           => true  // invalidate everything
+      case (_, C)           => true // invalidate everything
       case (_, H)           => highOutputInvalidates(Dependency.fromTransform(a))
       case (_, M)           => midOutputInvalidates(Dependency.fromTransform(a))
       case (_, L)           => false // invalidate nothing
     }
-  }
-
-  /** Convenience method to get annotations relevant to this Transform
-    *
-    * @param state The [[CircuitState]] form which to extract annotations
-    * @return A collection of annotations
-    */
-  @deprecated("Just collect the actual Annotation types the transform wants", "1.1")
-  final def getMyAnnotations(state: CircuitState): Seq[Annotation] = {
-    val msg = "getMyAnnotations is deprecated, use collect and match on concrete types"
-    StageUtils.dramaticWarning(msg)
-    state.annotations.collect { case a: LegacyAnnotation if a.transform == this.getClass => a }
   }
 
   /** Executes before any transform's execute method
@@ -382,7 +371,7 @@ trait Transform extends TransformLike[CircuitState] with DependencyAPI[Transform
     * @return A transformed Firrtl AST
     */
   final def runTransform(state: CircuitState): CircuitState = {
-    val result = Transform.runTransform(name, execute(prepare(state)), logger)
+    val result = execute(prepare(state))
     Transform.remapAnnotations(name, state, result, logger)
   }
 
@@ -400,7 +389,7 @@ abstract class SeqTransform extends Transform with SeqTransformBased {
     /*
     require(state.form <= inputForm,
       s"[$name]: Input form must be lower or equal to $inputForm. Got ${state.form}")
-    */
+     */
     val ret = runTransforms(state)
     CircuitState(ret.circuit, outputForm, ret.annotations, ret.renames)
   }
@@ -415,7 +404,7 @@ trait ResolvedAnnotationPaths {
   val annotationClasses: Traversable[Class[_]]
 
   override def prepare(state: CircuitState): CircuitState = {
-    state.resolvePathsOf(annotationClasses.toSeq:_*)
+    state.resolvePathsOf(annotationClasses.toSeq: _*)
   }
 }
 
@@ -424,7 +413,7 @@ trait Emitter extends Transform {
 
   override def invalidates(a: Transform) = false
 
-  @deprecated("Use emission annotations instead", "firrtl 1.0")
+  @deprecated("Use emission annotations instead", "FIRRTL 1.0")
   def emit(state: CircuitState, writer: Writer): Unit
 
   /** An output suffix to use if the output of this [[Emitter]] was written to a file */
@@ -433,6 +422,7 @@ trait Emitter extends Transform {
 
 @deprecated("This will be removed in 1.4", "FIRRTL 1.3")
 object CompilerUtils extends LazyLogging {
+
   /** Generates a sequence of [[Transform]]s to lower a Firrtl circuit
     *
     * @param inputForm [[CircuitForm]] to lower from
@@ -441,7 +431,8 @@ object CompilerUtils extends LazyLogging {
     */
   @deprecated(
     "Use a TransformManager requesting which transforms you want to run. This will be removed in 1.4.",
-    "FIRRTL 1.3")
+    "FIRRTL 1.3"
+  )
   def getLoweringTransforms(inputForm: CircuitForm, outputForm: CircuitForm): Seq[Transform] = {
     // If outputForm is equal-to or higher than inputForm, nothing to lower
     if (outputForm >= inputForm) {
@@ -451,10 +442,15 @@ object CompilerUtils extends LazyLogging {
         case ChirrtlForm =>
           Seq(new ChirrtlToHighFirrtl) ++ getLoweringTransforms(HighForm, outputForm)
         case HighForm =>
-          Seq(new IRToWorkingIR, new ResolveAndCheck, new transforms.DedupModules, new HighFirrtlToMiddleFirrtl) ++
+          Seq(
+            new IRToWorkingIR,
+            new ResolveAndCheck,
+            new firrtl.transforms.DedupModules,
+            new HighFirrtlToMiddleFirrtl
+          ) ++
             getLoweringTransforms(MidForm, outputForm)
-        case MidForm => Seq(new MiddleFirrtlToLowFirrtl) ++ getLoweringTransforms(LowForm, outputForm)
-        case LowForm => throwInternalError("getLoweringTransforms - LowForm") // should be caught by if above
+        case MidForm     => Seq(new MiddleFirrtlToLowFirrtl) ++ getLoweringTransforms(LowForm, outputForm)
+        case LowForm     => throwInternalError("getLoweringTransforms - LowForm") // should be caught by if above
         case UnknownForm => throwInternalError("getLoweringTransforms - UnknownForm") // should be caught by if above
       }
     }
@@ -493,28 +489,32 @@ object CompilerUtils extends LazyLogging {
     */
   @deprecated(
     "Use a TransformManager requesting which transforms you want to run. This will be removed in 1.4.",
-    "FIRRTL 1.3")
+    "FIRRTL 1.3"
+  )
   def mergeTransforms(lowering: Seq[Transform], custom: Seq[Transform]): Seq[Transform] = {
-    custom
-      .sortWith{
-        case (a, b) => (a, b) match {
+    custom.sortWith {
+      case (a, b) =>
+        (a, b) match {
           case (_: Emitter, _: Emitter) => false
-          case (_, _: Emitter)          => true
-          case _                        => false }}
-      .foldLeft(lowering) { case (transforms, xform) =>
-      val index = transforms lastIndexWhere (_.outputForm == xform.inputForm)
-      assert(index >= 0 || xform.inputForm == ChirrtlForm, // If ChirrtlForm just put at front
-        s"No transform in $lowering has outputForm ${xform.inputForm} as required by $xform")
-      val (front, back) = transforms.splitAt(index + 1) // +1 because we want to be AFTER index
-      front ++ List(xform) ++ getLoweringTransforms(xform.outputForm, xform.inputForm) ++ back
+          case (_, _: Emitter) => true
+          case _ => false
+        }
     }
+      .foldLeft(lowering) {
+        case (transforms, xform) =>
+          val index = transforms.lastIndexWhere(_.outputForm == xform.inputForm)
+          assert(
+            index >= 0 || xform.inputForm == ChirrtlForm, // If ChirrtlForm just put at front
+            s"No transform in $lowering has outputForm ${xform.inputForm} as required by $xform"
+          )
+          val (front, back) = transforms.splitAt(index + 1) // +1 because we want to be AFTER index
+          front ++ List(xform) ++ getLoweringTransforms(xform.outputForm, xform.inputForm) ++ back
+      }
   }
 
 }
 
-@deprecated(
-  "Migrate to firrtl.stage.transforms.Compiler. This will be removed in 1.4.",
-  "FIRRTL 1.3")
+@deprecated("Migrate to firrtl.stage.transforms.Compiler. This will be removed in 1.4.", "FIRRTL 1.3")
 trait Compiler extends Transform with DependencyAPIMigration {
   def emitter: Emitter
 
@@ -525,15 +525,17 @@ trait Compiler extends Transform with DependencyAPIMigration {
   def transforms: Seq[Transform]
 
   final override def execute(state: CircuitState): CircuitState =
-    new stage.transforms.Compiler (
+    new stage.transforms.Compiler(
       targets = (transforms :+ emitter).map(Dependency.fromTransform),
       currentState = prerequisites,
       knownObjects = (transforms :+ emitter).toSet
     ).execute(state)
 
-  require(transforms.size >= 1,
-          s"Compiler transforms for '${this.getClass.getName}' must have at least ONE Transform! " +
-            "Use IdentityTransform if you need an identity/no-op transform.")
+  require(
+    transforms.size >= 1,
+    s"Compiler transforms for '${this.getClass.getName}' must have at least ONE Transform! " +
+      "Use IdentityTransform if you need an identity/no-op transform."
+  )
 
   /** Perform compilation
     *
@@ -542,10 +544,12 @@ trait Compiler extends Transform with DependencyAPIMigration {
     * @param customTransforms Any custom [[Transform]]s that will be inserted
     *   into the compilation process by [[CompilerUtils.mergeTransforms]]
     */
-  @deprecated("Please use compileAndEmit or other compile method instead", "firrtl 1.0")
-  def compile(state: CircuitState,
-              writer: Writer,
-              customTransforms: Seq[Transform] = Seq.empty): CircuitState = {
+  @deprecated(
+    "Migrate to '(new FirrtlStage).execute(args: Array[String], annotations: AnnotationSeq)'." +
+      "This will be removed in 1.4.",
+    "FIRRTL 1.0"
+  )
+  def compile(state: CircuitState, writer: Writer, customTransforms: Seq[Transform] = Seq.empty): CircuitState = {
     val finalState = compileAndEmit(state, customTransforms)
     writer.write(finalState.getEmittedCircuit.value)
     finalState
@@ -563,8 +567,12 @@ trait Compiler extends Transform with DependencyAPIMigration {
     *   into the compilation process by [[CompilerUtils.mergeTransforms]]
     * @return result of compilation with emitted circuit annotated
     */
-  def compileAndEmit(state: CircuitState,
-                     customTransforms: Seq[Transform] = Seq.empty): CircuitState = {
+  @deprecated(
+    "Migrate to '(new FirrtlStage).execute(args: Array[String], annotations: AnnotationSeq)'." +
+      "This will be removed in 1.4.",
+    "FIRRTL 1.3.3"
+  )
+  def compileAndEmit(state: CircuitState, customTransforms: Seq[Transform] = Seq.empty): CircuitState = {
     val emitAnno = EmitCircuitAnnotation(emitter.getClass)
     compile(state.copy(annotations = emitAnno +: state.annotations), emitter +: customTransforms)
   }
@@ -578,8 +586,13 @@ trait Compiler extends Transform with DependencyAPIMigration {
     *   process by [[CompilerUtils.mergeTransforms]]
     * @return result of compilation
     */
+  @deprecated(
+    "Migrate to '(new FirrtlStage).execute(args: Array[String], annotations: AnnotationSeq)'." +
+      "This will be removed in 1.4.",
+    "FIRRTL 1.3.3"
+  )
   def compile(state: CircuitState, customTransforms: Seq[Transform]): CircuitState = {
-    val transformManager = new stage.transforms.Compiler (
+    val transformManager = new stage.transforms.Compiler(
       targets = (emitter +: customTransforms ++: transforms).map(Dependency.fromTransform),
       currentState = prerequisites,
       knownObjects = (transforms :+ emitter).toSet

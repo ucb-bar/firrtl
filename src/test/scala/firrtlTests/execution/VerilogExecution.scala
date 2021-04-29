@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package firrtlTests.execution
 
 import java.io.File
@@ -21,7 +23,8 @@ trait VerilogExecution extends TestExecution {
     // Run FIRRTL, emit Verilog file
     val cAnno = FirrtlCircuitAnnotation(c)
     val tdAnno = TargetDirAnnotation(testDir.getAbsolutePath)
-    (new FirrtlStage).run(AnnotationSeq(Seq(cAnno, tdAnno) ++ customAnnotations))
+
+    (new FirrtlStage).execute(Array.empty, AnnotationSeq(Seq(cAnno, tdAnno)) ++ customAnnotations)
 
     // Copy harness resource to test directory
     val harness = new File(testDir, s"top.cpp")
@@ -29,7 +32,7 @@ trait VerilogExecution extends TestExecution {
 
     // Make and run Verilog simulation
     verilogToCpp(c.main, testDir, Nil, harness) #&&
-    cppToExe(c.main, testDir) ! loggingProcessLogger
+      cppToExe(c.main, testDir) ! loggingProcessLogger
     assert(executeExpectingSuccess(c.main, testDir))
   }
 }

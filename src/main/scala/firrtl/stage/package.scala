@@ -1,10 +1,11 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl
 
 import firrtl.annotations.DeletedAnnotation
-import firrtl.options.{OptionsView, Viewer}
+import firrtl.options.OptionsView
 import firrtl.stage.phases.WriteEmitted
+import logger.LazyLogging
 
 /** The [[stage]] package provides an implementation of the FIRRTL compiler using the [[firrtl.options]] package. This
   * primarily consists of:
@@ -19,44 +20,57 @@ import firrtl.stage.phases.WriteEmitted
   *   - [[FirrtlStageUtils]] containing miscellaneous utilities for [[stage]]
   */
 package object stage {
-  implicit object FirrtlOptionsView extends OptionsView[FirrtlOptions] {
+  implicit object FirrtlOptionsView extends OptionsView[FirrtlOptions] with LazyLogging {
 
     /**
       * @todo custom transforms are appended as discovered, can this be prepended safely?
       */
-    def view(options: AnnotationSeq): FirrtlOptions = options
-      .collect { case a: FirrtlOption => a }
-      .foldLeft(new FirrtlOptions()){ (c, x) =>
+    def view(options: AnnotationSeq): FirrtlOptions = options.collect { case a: FirrtlOption => a }
+      .foldLeft(new FirrtlOptions()) { (c, x) =>
         x match {
-          case OutputFileAnnotation(f)           => c.copy(outputFileName = Some(f))
-          case InfoModeAnnotation(i)             => c.copy(infoModeName = i)
-          case CompilerAnnotation(cx)            => c.copy(compiler = cx)
-          case FirrtlCircuitAnnotation(cir)      => c.copy(firrtlCircuit = Some(cir))
+          case OutputFileAnnotation(f)      => c.copy(outputFileName = Some(f))
+          case InfoModeAnnotation(i)        => c.copy(infoModeName = i)
+          case FirrtlCircuitAnnotation(cir) => c.copy(firrtlCircuit = Some(cir))
+          case a: CompilerAnnotation => logger.warn(s"Use of CompilerAnnotation is deprecated. Ignoring $a"); c
+          case WarnNoScalaVersionDeprecation => c
+          case PrettyNoExprInlining          => c
+          case _: DisableFold => c
         }
       }
   }
 
-  private [firrtl] implicit object FirrtlExecutionResultView extends OptionsView[FirrtlExecutionResult] {
-
-    private lazy val dummyWriteEmitted = new WriteEmitted
+  private[firrtl] implicit object FirrtlExecutionResultView
+      extends OptionsView[FirrtlExecutionResult]
+      with LazyLogging {
 
     def view(options: AnnotationSeq): FirrtlExecutionResult = {
-      val fopts = Viewer[FirrtlOptions].view(options)
-      val emittedRes = options
-        .collect{ case DeletedAnnotation(dummyWriteEmitted.name, a: EmittedAnnotation[_]) => a.value.value }
+      val emittedRes = options.collect { case a: EmittedAnnotation[_] => a.value.value }
         .mkString("\n")
 
-      options.collectFirst{ case a: FirrtlCircuitAnnotation => a.circuit } match {
+      val emitters = options.collect { case RunFirrtlTransformAnnotation(e: Emitter) => e }
+      if (emitters.length > 1) {
+        logger.warn(
+          "More than one emitter used which cannot be accurately represented" +
+            "in the deprecated FirrtlExecutionResult: " + emitters.map(_.name).mkString(", ")
+        )
+      }
+      val compilers = options.collect { case CompilerAnnotation(c) => c }
+      val emitType = emitters.headOption.orElse(compilers.headOption).map(_.name).getOrElse("N/A")
+      val form = emitters.headOption.orElse(compilers.headOption).map(_.outputForm).getOrElse(UnknownForm)
+
+      options.collectFirst { case a: FirrtlCircuitAnnotation => a.circuit } match {
         case None => FirrtlExecutionFailure("No circuit found in AnnotationSeq!")
-        case Some(a) => FirrtlExecutionSuccess(
-          emitType = fopts.compiler.getClass.getName,
-          emitted = emittedRes,
-          circuitState = CircuitState(
-            circuit = a,
-            form = fopts.compiler.outputForm,
-            annotations = options,
-            renames = None
-          ))
+        case Some(a) =>
+          FirrtlExecutionSuccess(
+            emitType = emitType,
+            emitted = emittedRes,
+            circuitState = CircuitState(
+              circuit = a,
+              form = form,
+              annotations = options,
+              renames = None
+            )
+          )
       }
     }
   }

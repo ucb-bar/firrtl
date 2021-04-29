@@ -1,10 +1,10 @@
-// See LICENSE for license details.
+// SPDX-License-Identifier: Apache-2.0
 
 package firrtl.options
 
 import firrtl.AnnotationSeq
 
-import logger.{LogLevelAnnotation, ClassLogLevelAnnotation, LogFileAnnotation, LogClassNamesAnnotation}
+import logger.{ClassLogLevelAnnotation, LogClassNamesAnnotation, LogFileAnnotation, LogLevelAnnotation}
 
 import scopt.OptionParser
 
@@ -29,7 +29,7 @@ class Shell(val applicationName: String) {
       lib.addOptions(parser)
     }
 
-    libraries
+    libraries.toSeq
   }
 
   /** Contains all discovered [[RegisteredTransform]] */
@@ -43,7 +43,7 @@ class Shell(val applicationName: String) {
       tx.addOptions(parser)
     }
 
-    transforms
+    transforms.toSeq
   }
 
   /** The [[AnnotationSeq]] generated from command line arguments
@@ -62,28 +62,25 @@ class Shell(val applicationName: String) {
 
   parser.note("Shell Options")
   ProgramArgsAnnotation.addOptions(parser)
-  Seq( TargetDirAnnotation,
-       InputAnnotationFileAnnotation,
-       OutputAnnotationFileAnnotation )
+  Seq(TargetDirAnnotation, InputAnnotationFileAnnotation, OutputAnnotationFileAnnotation)
     .foreach(_.addOptions(parser))
 
-  parser.opt[Unit]("show-registrations")
-    .action{ (_, c) =>
+  parser
+    .opt[Unit]("show-registrations")
+    .action { (_, c) =>
       val rtString = registeredTransforms.map(r => s"\n  - ${r.getClass.getName}").mkString
       val rlString = registeredLibraries.map(l => s"\n  - ${l.getClass.getName}").mkString
 
       println(s"""|The following FIRRTL transforms registered command line options:$rtString
                   |The following libraries registered command line options:$rlString""".stripMargin)
-      c }
+      c
+    }
     .unbounded()
     .text("print discovered registered libraries and transforms")
 
   parser.help("help").text("prints this usage text")
 
   parser.note("Logging Options")
-  Seq( LogLevelAnnotation,
-       ClassLogLevelAnnotation,
-       LogFileAnnotation,
-       LogClassNamesAnnotation )
+  Seq(LogLevelAnnotation, ClassLogLevelAnnotation, LogFileAnnotation, LogClassNamesAnnotation)
     .foreach(_.addOptions(parser))
 }

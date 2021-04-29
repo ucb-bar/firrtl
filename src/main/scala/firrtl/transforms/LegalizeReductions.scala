@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package firrtl
 package transforms
 
@@ -6,17 +8,16 @@ import firrtl.Mappers._
 import firrtl.options.Dependency
 import firrtl.Utils.BoolType
 
-
 object LegalizeAndReductionsTransform {
 
   private def allOnesOfType(tpe: Type): Literal = tpe match {
     case UIntType(width @ IntWidth(x)) => UIntLiteral((BigInt(1) << x.toInt) - 1, width)
-    case SIntType(width) => SIntLiteral(-1, width)
+    case SIntType(width)               => SIntLiteral(-1, width)
 
   }
 
   def onExpr(expr: Expression): Expression = expr.map(onExpr) match {
-    case DoPrim(PrimOps.Andr, Seq(arg), _,_) if bitWidth(arg.tpe) > 64 =>
+    case DoPrim(PrimOps.Andr, Seq(arg), _, _) if bitWidth(arg.tpe) > 64 =>
       DoPrim(PrimOps.Eq, Seq(arg, allOnesOfType(arg.tpe)), Seq(), BoolType)
     case other => other
   }
@@ -34,9 +35,8 @@ object LegalizeAndReductionsTransform {
 class LegalizeAndReductionsTransform extends Transform with DependencyAPIMigration {
 
   override def prerequisites =
-    firrtl.stage.Forms.WorkingIR ++
-    Seq( Dependency(passes.CheckTypes),
-         Dependency(passes.CheckWidths))
+    firrtl.stage.Forms.MinimalHighForm ++
+      Seq(Dependency(passes.CheckTypes), Dependency(passes.CheckWidths))
 
   override def optionalPrerequisites = Nil
 
