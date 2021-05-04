@@ -123,8 +123,8 @@ case class ManipulateNamesAllowlistResultAnnotation[A <: ManipulateNames[_]](
   def toRenameMap: RenameMap = {
     val m = oldTargets
       .zip(targets)
-      .flatMap {
-        case (a, b) => a.map(_ -> b)
+      .flatMap { case (a, b) =>
+        a.map(_ -> b)
       }
       .toMap
       .asInstanceOf[Map[CompleteTarget, Seq[CompleteTarget]]]

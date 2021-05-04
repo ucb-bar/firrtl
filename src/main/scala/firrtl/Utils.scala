@@ -107,18 +107,16 @@ object fromBits {
   private def getPart(lhs: Expression, lhst: Type, rhs: Expression, offset: BigInt): (BigInt, Seq[Statement]) =
     lhst match {
       case t: VectorType =>
-        ((0 until t.size).foldLeft((offset, Seq[Statement]()))) {
-          case ((curOffset, stmts), i) =>
-            val subidx = WSubIndex(lhs, i, t.tpe, UnknownFlow)
-            val (tmpOffset, substmts) = getPart(subidx, t.tpe, rhs, curOffset)
-            (tmpOffset, stmts ++ substmts)
+        ((0 until t.size).foldLeft((offset, Seq[Statement]()))) { case ((curOffset, stmts), i) =>
+          val subidx = WSubIndex(lhs, i, t.tpe, UnknownFlow)
+          val (tmpOffset, substmts) = getPart(subidx, t.tpe, rhs, curOffset)
+          (tmpOffset, stmts ++ substmts)
         }
       case t: BundleType =>
-        (t.fields.foldRight((offset, Seq[Statement]()))) {
-          case (f, (curOffset, stmts)) =>
-            val subfield = WSubField(lhs, f.name, f.tpe, UnknownFlow)
-            val (tmpOffset, substmts) = getPart(subfield, f.tpe, rhs, curOffset)
-            (tmpOffset, stmts ++ substmts)
+        (t.fields.foldRight((offset, Seq[Statement]()))) { case (f, (curOffset, stmts)) =>
+          val subfield = WSubField(lhs, f.name, f.tpe, UnknownFlow)
+          val (tmpOffset, substmts) = getPart(subfield, f.tpe, rhs, curOffset)
+          (tmpOffset, stmts ++ substmts)
         }
       case t: GroundType => getPartGround(lhs, t, rhs, offset)
       case t => Utils.error(s"Unknown type encountered in fromBits: $lhst")
@@ -304,9 +302,8 @@ object Utils extends LazyLogging {
     case ex: Mux =>
       val e1s = create_exps(ex.tval)
       val e2s = create_exps(ex.fval)
-      e1s.zip(e2s).map {
-        case (e1, e2) =>
-          Mux(ex.cond, e1, e2, mux_type_and_widths(e1, e2))
+      e1s.zip(e2s).map { case (e1, e2) =>
+        Mux(ex.cond, e1, e2, mux_type_and_widths(e1, e2))
       }
     case ex: ValidIf => create_exps(ex.value).map(e1 => ValidIf(ex.cond, e1, e1.tpe))
     case ex =>
@@ -326,9 +323,8 @@ object Utils extends LazyLogging {
     case ex: Mux =>
       val e1s = expandRef(ex.tval)
       val e2s = expandRef(ex.fval)
-      e1s.zip(e2s).map {
-        case (e1, e2) =>
-          Mux(ex.cond, e1, e2, mux_type_and_widths(e1, e2))
+      e1s.zip(e2s).map { case (e1, e2) =>
+        Mux(ex.cond, e1, e2, mux_type_and_widths(e1, e2))
       }
     case ex: ValidIf => expandRef(ex.value).map(e1 => ValidIf(ex.cond, e1, e1.tpe))
     case ex =>
@@ -452,8 +448,8 @@ object Utils extends LazyLogging {
     case (t1: IntervalType, t2: IntervalType) => IntervalType(UnknownBound, UnknownBound, UnknownWidth)
     case (t1: VectorType, t2: VectorType) => VectorType(mux_type(t1.tpe, t2.tpe), t1.size)
     case (t1: BundleType, t2: BundleType) =>
-      BundleType(t1.fields.zip(t2.fields).map {
-        case (f1, f2) => Field(f1.name, f1.flip, mux_type(f1.tpe, f2.tpe))
+      BundleType(t1.fields.zip(t2.fields).map { case (f1, f2) =>
+        Field(f1.name, f1.flip, mux_type(f1.tpe, f2.tpe))
       })
     case _ => UnknownType
   }
@@ -475,15 +471,15 @@ object Utils extends LazyLogging {
         IntervalType(IsMin(l1, l2), constraint.IsMax(u1, u2), MAX(p1, p2))
       case (t1x: VectorType, t2x: VectorType) => VectorType(mux_type_and_widths(t1x.tpe, t2x.tpe), t1x.size)
       case (t1x: BundleType, t2x: BundleType) =>
-        BundleType(t1x.fields.zip(t2x.fields).map {
-          case (f1, f2) => Field(f1.name, f1.flip, mux_type_and_widths(f1.tpe, f2.tpe))
+        BundleType(t1x.fields.zip(t2x.fields).map { case (f1, f2) =>
+          Field(f1.name, f1.flip, mux_type_and_widths(f1.tpe, f2.tpe))
         })
       case _ => UnknownType
     }
   }
 
-  def module_type(m: DefModule): BundleType = BundleType(m.ports.map {
-    case Port(_, name, dir, tpe) => Field(name, to_flip(dir), tpe)
+  def module_type(m: DefModule): BundleType = BundleType(m.ports.map { case Port(_, name, dir, tpe) =>
+    Field(name, to_flip(dir), tpe)
   })
   def sub_type(v: Type): Type = v match {
     case vx: VectorType => vx.tpe
@@ -519,35 +515,32 @@ object Utils extends LazyLogging {
       case (t1x: BundleType, t2x: BundleType) =>
         def emptyMap = Map[String, (Type, Orientation, Int)]()
         val t1_fields = t1x.fields
-          .foldLeft((emptyMap, 0)) {
-            case ((map, ilen), f1) =>
-              (map + (f1.name -> ((f1.tpe, f1.flip, ilen))), ilen + get_size(f1.tpe))
+          .foldLeft((emptyMap, 0)) { case ((map, ilen), f1) =>
+            (map + (f1.name -> ((f1.tpe, f1.flip, ilen))), ilen + get_size(f1.tpe))
           }
           ._1
         t2x.fields
-          .foldLeft((Seq[(Int, Int)](), 0)) {
-            case ((points, jlen), f2) =>
-              t1_fields.get(f2.name) match {
-                case None => (points, jlen + get_size(f2.tpe))
-                case Some((f1_tpe, f1_flip, ilen)) =>
-                  val f1_times = times(flip1, f1_flip)
-                  val f2_times = times(flip2, f2.flip)
-                  val ls = get_valid_points(f1_tpe, f2.tpe, f1_times, f2_times)
-                  (points ++ (ls.map { case (x, y) => (x + ilen, y + jlen) }), jlen + get_size(f2.tpe))
-              }
+          .foldLeft((Seq[(Int, Int)](), 0)) { case ((points, jlen), f2) =>
+            t1_fields.get(f2.name) match {
+              case None => (points, jlen + get_size(f2.tpe))
+              case Some((f1_tpe, f1_flip, ilen)) =>
+                val f1_times = times(flip1, f1_flip)
+                val f2_times = times(flip2, f2.flip)
+                val ls = get_valid_points(f1_tpe, f2.tpe, f1_times, f2_times)
+                (points ++ (ls.map { case (x, y) => (x + ilen, y + jlen) }), jlen + get_size(f2.tpe))
+            }
           }
           ._1
       case (t1x: VectorType, t2x: VectorType) =>
         val size = math.min(t1x.size, t2x.size)
         (0 until size)
-          .foldLeft((Seq[(Int, Int)](), 0, 0)) {
-            case ((points, ilen, jlen), _) =>
-              val ls = get_valid_points(t1x.tpe, t2x.tpe, flip1, flip2)
-              (
-                points ++ (ls.map { case (x, y) => (x + ilen, y + jlen) }),
-                ilen + get_size(t1x.tpe),
-                jlen + get_size(t2x.tpe)
-              )
+          .foldLeft((Seq[(Int, Int)](), 0, 0)) { case ((points, ilen, jlen), _) =>
+            val ls = get_valid_points(t1x.tpe, t2x.tpe, flip1, flip2)
+            (
+              points ++ (ls.map { case (x, y) => (x + ilen, y + jlen) }),
+              ilen + get_size(t1x.tpe),
+              jlen + get_size(t2x.tpe)
+            )
           }
           ._1
       case (ClockType, ClockType)           => if (flip1 == flip2) Seq((0, 0)) else Nil
@@ -999,8 +992,7 @@ class MemoizedHash[T](val t: T) {
   }
 }
 
-/**
-  * Maintains a one to many graph of each modules instantiated child module.
+/** Maintains a one to many graph of each modules instantiated child module.
   * This graph can be searched for a path from a child module back to one of
   * it's parents.  If one is found a recursive loop has happened
   * The graph is a map between the name of a node to set of names of that nodes children
@@ -1008,8 +1000,7 @@ class MemoizedHash[T](val t: T) {
 class ModuleGraph {
   val nodes = mutable.HashMap[String, mutable.HashSet[String]]()
 
-  /**
-    * Add a child to a parent node
+  /** Add a child to a parent node
     * A parent node is created if it does not already exist
     *
     * @param parent module that instantiates another module
@@ -1022,8 +1013,7 @@ class ModuleGraph {
     pathExists(child, parent, List(child, parent))
   }
 
-  /**
-    * Starting at the name of a given child explore the tree of all children in depth first manner.
+  /** Starting at the name of a given child explore the tree of all children in depth first manner.
     * Return the first path (a list of strings) that goes from child to parent,
     * or an empty list of no such path is found.
     *

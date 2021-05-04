@@ -16,8 +16,7 @@ import AnalysisUtils._
 import MemPortUtils._
 import ResolveMaskGranularity._
 
-/**
-  * Lowers memories without splitting them, but without the complexity of ReplaceMemMacros
+/** Lowers memories without splitting them, but without the complexity of ReplaceMemMacros
   */
 class SimplifyMems extends Transform with DependencyAPIMigration {
 
@@ -45,21 +44,20 @@ class SimplifyMems extends Transform with DependencyAPIMigration {
       val simpleMemDecl =
         mem.copy(name = moduleNS.newName(s"${mem.name}_flattened"), dataType = flattenType(mem.dataType))
       val oldRT = mTarget.ref(mem.name)
-      val adapterConnects = memType(simpleMemDecl).fields.flatMap {
-        case Field(pName, Flip, pType: BundleType) =>
-          val memPort = WSubField(WRef(simpleMemDecl), pName)
-          val adapterPort = WSubField(WRef(adapterDecl), pName)
-          renames.delete(oldRT.field(pName))
-          pType.fields.map {
-            case Field(name, Flip, _) if name.contains("data") => // read data
-              fromBits(WSubField(adapterPort, name), WSubField(memPort, name))
-            case Field(name, Default, _) if name.contains("data") => // write data
-              Connect(mem.info, WSubField(memPort, name), toBits(WSubField(adapterPort, name)))
-            case Field(name, Default, _) if name.contains("mask") => // mask
-              Connect(mem.info, WSubField(memPort, name), Utils.one)
-            case Field(name, _, _) => // etc
-              Connect(mem.info, WSubField(memPort, name), WSubField(adapterPort, name))
-          }
+      val adapterConnects = memType(simpleMemDecl).fields.flatMap { case Field(pName, Flip, pType: BundleType) =>
+        val memPort = WSubField(WRef(simpleMemDecl), pName)
+        val adapterPort = WSubField(WRef(adapterDecl), pName)
+        renames.delete(oldRT.field(pName))
+        pType.fields.map {
+          case Field(name, Flip, _) if name.contains("data") => // read data
+            fromBits(WSubField(adapterPort, name), WSubField(memPort, name))
+          case Field(name, Default, _) if name.contains("data") => // write data
+            Connect(mem.info, WSubField(memPort, name), toBits(WSubField(adapterPort, name)))
+          case Field(name, Default, _) if name.contains("mask") => // mask
+            Connect(mem.info, WSubField(memPort, name), Utils.one)
+          case Field(name, _, _) => // etc
+            Connect(mem.info, WSubField(memPort, name), WSubField(adapterPort, name))
+        }
       }
       memAdapters(mem.name) = adapterDecl
       renames.record(oldRT, oldRT.copy(ref = simpleMemDecl.name))

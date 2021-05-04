@@ -234,9 +234,8 @@ final class RenameMap private (
   /** Serialize the underlying remapping of keys to new targets
     * @return
     */
-  def serialize: String = underlying.map {
-    case (k, v) =>
-      k.serialize + "=>" + v.map(_.serialize).mkString(", ")
+  def serialize: String = underlying.map { case (k, v) =>
+    k.serialize + "=>" + v.map(_.serialize).mkString(", ")
   }.mkString("\n")
 
   /** Records which local InstanceTargets will require modification.
@@ -525,8 +524,8 @@ final class RenameMap private (
             }
             rename match {
               case Seq(absolute: IsModule) if absolute.module == absolute.circuit =>
-                val withChildren = children.foldLeft(absolute) {
-                  case (target, (inst, ofMod)) => target.instOf(inst.value, ofMod.value)
+                val withChildren = children.foldLeft(absolute) { case (target, (inst, ofMod)) =>
+                  target.instOf(inst.value, ofMod.value)
                 }
                 AbsoluteOfModule(withChildren)
               case Seq(isMod: ModuleTarget) =>
@@ -638,16 +637,15 @@ final class RenameMap private (
       key match {
         case t: CircuitTarget => circuitGet(errors)(t)
         case t: ModuleTarget =>
-          circuitGet(errors)(CircuitTarget(t.circuit)).map {
-            case CircuitTarget(c) => t.copy(circuit = c)
+          circuitGet(errors)(CircuitTarget(t.circuit)).map { case CircuitTarget(c) =>
+            t.copy(circuit = c)
           }
         case t: IsComponent =>
-          circuitGet(errors)(CircuitTarget(t.circuit)).map {
-            case CircuitTarget(c) =>
-              t match {
-                case ref:  ReferenceTarget => ref.copy(circuit = c)
-                case inst: InstanceTarget  => inst.copy(circuit = c)
-              }
+          circuitGet(errors)(CircuitTarget(t.circuit)).map { case CircuitTarget(c) =>
+            t match {
+              case ref:  ReferenceTarget => ref.copy(circuit = c)
+              case inst: InstanceTarget  => inst.copy(circuit = c)
+            }
           }
       }
     }
@@ -687,8 +685,8 @@ final class RenameMap private (
   def delete(name: ComponentName): Unit = underlying(name) = Seq.empty
 
   def addMap(map: collection.Map[Named, Seq[Named]]): Unit =
-    recordAll(map.map {
-      case (key, values) => (Target.convertNamed2Target(key), values.map(Target.convertNamed2Target))
+    recordAll(map.map { case (key, values) =>
+      (Target.convertNamed2Target(key), values.map(Target.convertNamed2Target))
     })
 
   def get(key: CircuitName): Option[Seq[CircuitName]] = {

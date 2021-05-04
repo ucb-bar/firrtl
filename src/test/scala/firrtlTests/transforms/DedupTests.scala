@@ -9,8 +9,7 @@ import firrtl.annotations._
 import firrtl.transforms.{DedupModules, NoCircuitDedupAnnotation}
 import firrtl.testutils._
 
-/**
-  * Tests inline instances transformation
+/** Tests inline instances transformation
   */
 class DedupModuleTests extends HighTransformSpec {
   case class MultiTargetDummyAnnotation(targets: Seq[Target], tag: Int) extends Annotation {

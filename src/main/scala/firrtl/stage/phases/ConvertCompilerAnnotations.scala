@@ -14,8 +14,8 @@ private[firrtl] class ConvertCompilerAnnotations extends Phase {
   override def invalidates(a: Phase) = false
 
   override def transform(annotations: AnnotationSeq): AnnotationSeq = {
-    annotations.collect {
-      case a: CompilerAnnotation => a
+    annotations.collect { case a: CompilerAnnotation =>
+      a
     } match {
       case a if a.size > 1 =>
         throw new OptionsException(

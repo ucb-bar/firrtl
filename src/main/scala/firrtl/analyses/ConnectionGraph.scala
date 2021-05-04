@@ -23,9 +23,8 @@ class ConnectionGraph protected (val circuit: Circuit, val digraph: DiGraph[Refe
     ) {
 
   lazy val serialize: String = s"""{
-                                  |${getEdgeMap.map {
-    case (k, vs) =>
-      s"""  "$k": {
+                                  |${getEdgeMap.map { case (k, vs) =>
+    s"""  "$k": {
                                   |    "kind": "${irLookup.kind(k)}",
                                   |    "type": "${irLookup.tpe(k)}",
                                   |    "expr": "${irLookup.expr(k, irLookup.flow(k))}",
@@ -284,16 +283,15 @@ class ConnectionGraph protected (val circuit: Circuit, val digraph: DiGraph[Refe
     if (path.size > 1) {
       path.head +: path
         .sliding(2)
-        .flatMap {
-          case Seq(from, to) =>
-            getShortCut(from) match {
-              case Some(set) if set.contains(to) && soFar.contains(from.pathlessTarget) =>
-                soFar += from.pathlessTarget
-                Seq(from.pathTarget.ref("..."), to)
-              case _ =>
-                soFar += from.pathlessTarget
-                Seq(to)
-            }
+        .flatMap { case Seq(from, to) =>
+          getShortCut(from) match {
+            case Some(set) if set.contains(to) && soFar.contains(from.pathlessTarget) =>
+              soFar += from.pathlessTarget
+              Seq(from.pathTarget.ref("..."), to)
+            case _ =>
+              soFar += from.pathlessTarget
+              Seq(to)
+          }
         }
         .toSeq
     } else path
@@ -368,7 +366,7 @@ object ConnectionGraph {
   def enteringNonParentInstance(source: ReferenceTarget)(localSink: ReferenceTarget): Boolean = {
     source.path.nonEmpty &&
     (source.noComponents.targetParent.asInstanceOf[InstanceTarget].encapsulatingModule != localSink.module ||
-    localSink.ref != source.path.last._1.value)
+      localSink.ref != source.path.last._1.value)
   }
 
   def enteringChildInstance(source: ReferenceTarget)(localSink: ReferenceTarget): Boolean = source match {
@@ -476,14 +474,13 @@ object ConnectionGraph {
       // Connect each subTarget to the corresponding init subTarget
       val allRegTargets = regTarget.leafSubTargets(d.tpe)
       val allInitTargets = initTarget.leafSubTargets(d.tpe).zip(Utils.create_exps(d.init))
-      allRegTargets.zip(allInitTargets).foreach {
-        case (r, (i, e)) =>
-          mdg.addVertex(i)
-          mdg.addVertex(r)
-          mdg.addEdge(clockTarget, r)
-          mdg.addEdge(resetTarget, r)
-          mdg.addEdge(i, r)
-          buildExpression(m, tagger, i)(e)
+      allRegTargets.zip(allInitTargets).foreach { case (r, (i, e)) =>
+        mdg.addVertex(i)
+        mdg.addVertex(r)
+        mdg.addEdge(clockTarget, r)
+        mdg.addEdge(resetTarget, r)
+        mdg.addEdge(i, r)
+        buildExpression(m, tagger, i)(e)
       }
     }
 
@@ -496,10 +493,9 @@ object ConnectionGraph {
           val sinkTarget = m.ref(d.name)
           addLabeledVertex(sinkTarget, stmt)
           val nodeTargets = sinkTarget.leafSubTargets(d.value.tpe)
-          nodeTargets.zip(Utils.create_exps(d.value)).foreach {
-            case (n, e) =>
-              mdg.addVertex(n)
-              buildExpression(m, tagger, n)(e)
+          nodeTargets.zip(Utils.create_exps(d.value)).foreach { case (n, e) =>
+            mdg.addVertex(n)
+            buildExpression(m, tagger, n)(e)
           }
 
         case c: Connect =>
@@ -540,10 +536,9 @@ object ConnectionGraph {
             mdg.addVertex(at)
             at
           }
-          attachTargets.combinations(2).foreach {
-            case Seq(l, r) =>
-              mdg.addEdge(l, r)
-              mdg.addEdge(r, l)
+          attachTargets.combinations(2).foreach { case Seq(l, r) =>
+            mdg.addEdge(l, r)
+            mdg.addEdge(r, l)
           }
         case p: Print => addLabeledVertex(asTarget(m, tagger)(p), p)
         case s: Stop  => addLabeledVertex(asTarget(m, tagger)(s), s)

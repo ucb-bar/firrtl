@@ -7,8 +7,7 @@ import firrtl.annotations._
 import firrtl.Mappers._
 import firrtl.options.Dependency
 
-/**
-  * A base trait for `Annotation`s that describe a `FirrtlNode`.
+/** A base trait for `Annotation`s that describe a `FirrtlNode`.
   * Usually, we would like to emit these descriptions in some way.
   */
 sealed trait DescriptionAnnotation extends Annotation {
@@ -16,8 +15,7 @@ sealed trait DescriptionAnnotation extends Annotation {
   def description: String
 }
 
-/**
-  * A docstring description (a comment).
+/** A docstring description (a comment).
   * @param target the object being described
   * @param description the docstring describing the object
   */
@@ -30,8 +28,7 @@ case class DocStringAnnotation(target: Target, description: String) extends Desc
   }
 }
 
-/**
-  * An Verilog-style attribute.
+/** An Verilog-style attribute.
   * @param target the object being given an attribute
   * @param description the attribute
   */
@@ -44,37 +41,32 @@ case class AttributeAnnotation(target: Target, description: String) extends Desc
   }
 }
 
-/**
-  * Base trait for an object that has associated descriptions
+/** Base trait for an object that has associated descriptions
   */
 private sealed trait HasDescription {
   def descriptions: Seq[Description]
 }
 
-/**
-  * Base trait for a description that gives some information about a `FirrtlNode`.
+/** Base trait for a description that gives some information about a `FirrtlNode`.
   * Usually, we would like to emit these descriptions in some way.
   */
 sealed trait Description extends FirrtlNode
 
-/**
-  * A docstring description (a comment)
+/** A docstring description (a comment)
   * @param string a comment
   */
 case class DocString(string: StringLit) extends Description {
   def serialize: String = "@[" + string.serialize + "]"
 }
 
-/**
-  * A Verilog-style attribute.
+/** A Verilog-style attribute.
   * @param string the attribute
   */
 case class Attribute(string: StringLit) extends Description {
   def serialize: String = "@[" + string.serialize + "]"
 }
 
-/**
-  * A statement with descriptions
+/** A statement with descriptions
   * @param descriptions
   * @param stmt the encapsulated statement
   */
@@ -94,8 +86,7 @@ private case class DescribedStmt(descriptions: Seq[Description], stmt: Statement
   def foreachInfo(f:   Info => Unit):             Unit = stmt.foreachInfo(f)
 }
 
-/**
-  * A module with descriptions
+/** A module with descriptions
   * @param descriptions list of descriptions for the module
   * @param portDescriptions list of descriptions for the module's ports
   * @param mod the encapsulated module
@@ -156,9 +147,8 @@ class AddDescriptionNodes extends Transform with DependencyAPIMigration {
       case d: IsDeclaration => Some(d.name)
       case _ => None
     }
-    val descs = sname.flatMap({
-      case name =>
-        compMap.get(name)
+    val descs = sname.flatMap({ case name =>
+      compMap.get(name)
     })
     (descs, s) match {
       case (Some(d), DescribedStmt(prevDescs, ss)) => DescribedStmt(prevDescs ++ d, ss)
@@ -188,8 +178,7 @@ class AddDescriptionNodes extends Transform with DependencyAPIMigration {
     }
   }
 
-  /**
-    * Merges descriptions of like types.
+  /** Merges descriptions of like types.
     *
     * Multiple DocStrings on the same object get merged together into one big multi-line comment.
     * Similarly, multiple attributes on the same object get merged into one attribute with attributes separated by

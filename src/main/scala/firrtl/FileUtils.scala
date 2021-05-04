@@ -24,8 +24,7 @@ object FileUtils {
     }
   }
 
-  /**
-    * recursively delete all directories in a relative path
+  /** recursively delete all directories in a relative path
     * DO NOT DELETE absolute paths
     *
     * @param directoryPathName a directory hierarchy to delete
@@ -34,8 +33,7 @@ object FileUtils {
     deleteDirectoryHierarchy(new File(directoryPathName))
   }
 
-  /**
-    * recursively delete all directories in a relative path
+  /** recursively delete all directories in a relative path
     * DO NOT DELETE absolute paths
     *
     * @param file: a directory hierarchy to delete

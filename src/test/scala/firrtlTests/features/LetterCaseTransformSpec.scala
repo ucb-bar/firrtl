@@ -91,8 +91,8 @@ class LetterCaseTransformSpec extends AnyFlatSpec with Matchers {
       },
       { case ir.Module(_, "baz_0", Seq(ir.Port(_, "out", _, _)), _) => true },
       { case ir.Module(_, "baz", Seq(ir.Port(_, "out", _, _)), _) => true },
-      /* External module "Ext" is not renamed */ {
-        case ir.ExtModule(_, "Ext", Seq(ir.Port(_, "OuT", _, _)), _, _) => true
+      /* External module "Ext" is not renamed */ { case ir.ExtModule(_, "Ext", Seq(ir.Port(_, "OuT", _, _)), _, _) =>
+        true
       },
       { case ir.DefNode(_, "bar", _) => true },
       { case ir.DefRegister(_, "baz", _, WRef("clk", _, _, _), WRef("rst_p", _, _, _), WRef("bar", _, _, _)) => true },
@@ -151,8 +151,8 @@ class LetterCaseTransformSpec extends AnyFlatSpec with Matchers {
       },
       { case ir.Module(_, "BAZ", Seq(ir.Port(_, "OUT", _, _)), _) => true },
       { case ir.Module(_, "BAZ_0", Seq(ir.Port(_, "OUT", _, _)), _) => true },
-      /* External module "Ext" is not renamed */ {
-        case ir.ExtModule(_, "Ext", Seq(ir.Port(_, "OuT", _, _)), _, _) => true
+      /* External module "Ext" is not renamed */ { case ir.ExtModule(_, "Ext", Seq(ir.Port(_, "OuT", _, _)), _, _) =>
+        true
       },
       { case ir.DefNode(_, "BAR", _) => true },
       { case ir.DefRegister(_, "BAZ", _, WRef("CLK", _, _, _), WRef("RST_P", _, _, _), WRef("BAR", _, _, _)) => true },

@@ -27,8 +27,8 @@ case class WiringNames(compName: String, source: String, sinks: Seq[Named], pin:
   */
 class Wiring(wiSeq: Seq[WiringInfo]) extends Pass {
   def run(c: Circuit): Circuit = analyze(c)
-    .foldLeft(c) {
-      case (cx, (tpe, modsMap)) => cx.copy(modules = cx.modules.map(onModule(tpe, modsMap)))
+    .foldLeft(c) { case (cx, (tpe, modsMap)) =>
+      cx.copy(modules = cx.modules.map(onModule(tpe, modsMap)))
     }
 
   /** Converts multiple units of wiring information to module modifications */
@@ -45,20 +45,18 @@ class Wiring(wiSeq: Seq[WiringInfo]) extends Pass {
     val portNames = mutable.Seq.fill(names.size)(Map[String, String]())
     c.modules.foreach { m =>
       val ns = Namespace(m)
-      names.zipWithIndex.foreach {
-        case (WiringNames(c, so, si, p), i) =>
-          portNames(i) = portNames(i) +
-            (m.name -> {
-              if (si.exists(getModuleName(_) == m.name)) ns.newName(p)
-              else ns.newName(tokenize(c).filterNot("[]." contains _).mkString("_"))
-            })
+      names.zipWithIndex.foreach { case (WiringNames(c, so, si, p), i) =>
+        portNames(i) = portNames(i) +
+          (m.name -> {
+            if (si.exists(getModuleName(_) == m.name)) ns.newName(p)
+            else ns.newName(tokenize(c).filterNot("[]." contains _).mkString("_"))
+          })
       }
     }
 
     val iGraph = InstanceKeyGraph(c)
-    names.zip(portNames).map {
-      case (WiringNames(comp, so, si, _), pn) =>
-        computeModifications(c, iGraph, comp, so, si, pn)
+    names.zip(portNames).map { case (WiringNames(comp, so, si, _), pn) =>
+      computeModifications(c, iGraph, comp, so, si, pn)
     }
   }
 
@@ -87,8 +85,8 @@ class Wiring(wiSeq: Seq[WiringInfo]) extends Pass {
 
     val sourceComponentType = getType(c, source, compName)
     val sinkComponents: Map[String, Seq[String]] = sinks.collect { case ComponentName(c, ModuleName(m, _)) => (c, m) }
-      .foldLeft(new scala.collection.immutable.HashMap[String, Seq[String]]) {
-        case (a, (c, m)) => a ++ Map(m -> (Seq(c) ++ a.getOrElse(m, Nil)))
+      .foldLeft(new scala.collection.immutable.HashMap[String, Seq[String]]) { case (a, (c, m)) =>
+        a ++ Map(m -> (Seq(c) ++ a.getOrElse(m, Nil)))
       }
 
     // Determine "ownership" of sources to sinks via minimum distance
@@ -110,81 +108,80 @@ class Wiring(wiSeq: Seq[WiringInfo]) extends Pass {
     def lowestCommonAncestor(moduleA: Seq[InstanceKey], moduleB: Seq[InstanceKey]): Seq[InstanceKey] =
       tour.rmq(moduleA, moduleB)
 
-    owners.foreach {
-      case (sink, source) =>
-        val lca = lowestCommonAncestor(sink, source)
+    owners.foreach { case (sink, source) =>
+      val lca = lowestCommonAncestor(sink, source)
 
-        // Compute metadata along Sink to LCA paths.
-        sink.drop(lca.size - 1).sliding(2).toList.reverse.foreach {
-          case Seq(InstanceKey(_, pm), InstanceKey(ci, cm)) =>
-            val to = s"$ci.${portNames(cm)}"
-            val from = s"${portNames(pm)}"
-            meta(pm) = makeWireC(meta(pm), portNames(pm), (to, from))
-            meta(cm) = meta(cm).copy(
-              addPortOrWire = Some((portNames(cm), DecInput))
-            )
-          // Case where the sink is the LCA
-          case Seq(InstanceKey(_, pm)) =>
-            // Case where the source is also the LCA
-            if (source.drop(lca.size).isEmpty) {
-              meta(pm) = makeWire(meta(pm), portNames(pm))
-            } else {
-              val InstanceKey(ci, cm) = source.drop(lca.size).head
-              val to = s"${portNames(pm)}"
-              val from = s"$ci.${portNames(cm)}"
-              meta(pm) = makeWireC(meta(pm), portNames(pm), (to, from))
-            }
-        }
-
-        // Compute metadata for the Sink
-        sink.last match {
-          case InstanceKey(_, m) =>
-            if (sinkComponents.contains(m)) {
-              val from = s"${portNames(m)}"
-              sinkComponents(m).foreach(to =>
-                meta(m) = meta(m).copy(
-                  cons = (meta(m).cons :+ ((to, from))).distinct
-                )
-              )
-            }
-        }
-
-        // Compute metadata for the Source
-        source.last match {
-          case InstanceKey(_, m) =>
-            val to = s"${portNames(m)}"
-            val from = compName
-            meta(m) = meta(m).copy(
-              cons = (meta(m).cons :+ ((to, from))).distinct
-            )
-        }
-
-        // Compute metadata along Source to LCA path
-        source.drop(lca.size - 1).sliding(2).toList.reverse.map {
-          case Seq(InstanceKey(_, pm), InstanceKey(ci, cm)) => {
+      // Compute metadata along Sink to LCA paths.
+      sink.drop(lca.size - 1).sliding(2).toList.reverse.foreach {
+        case Seq(InstanceKey(_, pm), InstanceKey(ci, cm)) =>
+          val to = s"$ci.${portNames(cm)}"
+          val from = s"${portNames(pm)}"
+          meta(pm) = makeWireC(meta(pm), portNames(pm), (to, from))
+          meta(cm) = meta(cm).copy(
+            addPortOrWire = Some((portNames(cm), DecInput))
+          )
+        // Case where the sink is the LCA
+        case Seq(InstanceKey(_, pm)) =>
+          // Case where the source is also the LCA
+          if (source.drop(lca.size).isEmpty) {
+            meta(pm) = makeWire(meta(pm), portNames(pm))
+          } else {
+            val InstanceKey(ci, cm) = source.drop(lca.size).head
             val to = s"${portNames(pm)}"
             val from = s"$ci.${portNames(cm)}"
+            meta(pm) = makeWireC(meta(pm), portNames(pm), (to, from))
+          }
+      }
+
+      // Compute metadata for the Sink
+      sink.last match {
+        case InstanceKey(_, m) =>
+          if (sinkComponents.contains(m)) {
+            val from = s"${portNames(m)}"
+            sinkComponents(m).foreach(to =>
+              meta(m) = meta(m).copy(
+                cons = (meta(m).cons :+ ((to, from))).distinct
+              )
+            )
+          }
+      }
+
+      // Compute metadata for the Source
+      source.last match {
+        case InstanceKey(_, m) =>
+          val to = s"${portNames(m)}"
+          val from = compName
+          meta(m) = meta(m).copy(
+            cons = (meta(m).cons :+ ((to, from))).distinct
+          )
+      }
+
+      // Compute metadata along Source to LCA path
+      source.drop(lca.size - 1).sliding(2).toList.reverse.map {
+        case Seq(InstanceKey(_, pm), InstanceKey(ci, cm)) => {
+          val to = s"${portNames(pm)}"
+          val from = s"$ci.${portNames(cm)}"
+          meta(pm) = meta(pm).copy(
+            cons = (meta(pm).cons :+ ((to, from))).distinct
+          )
+          meta(cm) = meta(cm).copy(
+            addPortOrWire = Some((portNames(cm), DecOutput))
+          )
+        }
+        // Case where the source is the LCA
+        case Seq(InstanceKey(_, pm)) => {
+          // Case where the sink is also the LCA. We do nothing here,
+          // as we've created the connecting wire above
+          if (sink.drop(lca.size).isEmpty) {} else {
+            val InstanceKey(ci, cm) = sink.drop(lca.size).head
+            val to = s"$ci.${portNames(cm)}"
+            val from = s"${portNames(pm)}"
             meta(pm) = meta(pm).copy(
               cons = (meta(pm).cons :+ ((to, from))).distinct
             )
-            meta(cm) = meta(cm).copy(
-              addPortOrWire = Some((portNames(cm), DecOutput))
-            )
-          }
-          // Case where the source is the LCA
-          case Seq(InstanceKey(_, pm)) => {
-            // Case where the sink is also the LCA. We do nothing here,
-            // as we've created the connecting wire above
-            if (sink.drop(lca.size).isEmpty) {} else {
-              val InstanceKey(ci, cm) = sink.drop(lca.size).head
-              val to = s"$ci.${portNames(cm)}"
-              val from = s"${portNames(pm)}"
-              meta(pm) = meta(pm).copy(
-                cons = (meta(pm).cons :+ ((to, from))).distinct
-              )
-            }
           }
         }
+      }
     }
     (sourceComponentType, meta.toMap)
   }
@@ -206,9 +203,8 @@ class Wiring(wiSeq: Seq[WiringInfo]) extends Pass {
               case DecWire   => defines += DefWire(NoInfo, s, t)
             }
         }
-        connects ++= (l.cons.map {
-          case ((l, r)) =>
-            Connect(NoInfo, toExp(l), toExp(r))
+        connects ++= (l.cons.map { case ((l, r)) =>
+          Connect(NoInfo, toExp(l), toExp(r))
         })
         m match {
           case Module(i, n, ps, body) =>

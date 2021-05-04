@@ -231,8 +231,8 @@ class ManipulateNamesSpec extends AnyFlatSpec with Matchers {
     val r = RenameMap()
     r.delete(`~Foo|prefix_Bar`)
 
-    val ax = a.update(r).collect {
-      case b: ManipulateNamesAllowlistResultAnnotation[_] => b
+    val ax = a.update(r).collect { case b: ManipulateNamesAllowlistResultAnnotation[_] =>
+      b
     }
 
     ax should not be length(1)

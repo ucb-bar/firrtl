@@ -172,11 +172,10 @@ private object Z3ModelChecker extends LazyLogging {
     val smtFile = new File(testDir, main + ".smt2")
     val header = read(smtFile)
     val steps = (0 to kmax).map(k => new File(testDir, main + s"_step$k.smt2")).zipWithIndex
-    steps.foreach {
-      case (f, k) =>
-        writeStep(f, main, header, k)
-        val success = executeStep(f.getAbsolutePath)
-        if (!success) return MCFail(k)
+    steps.foreach { case (f, k) =>
+      writeStep(f, main, header, k)
+      val success = executeStep(f.getAbsolutePath)
+      if (!success) return MCFail(k)
     }
     MCSuccess
   }

@@ -162,16 +162,15 @@ private class ModuleToTransitionSystem extends LazyLogging {
     val constraints = scan.assumes.toSet
     val bad = scan.asserts.toSet
     val isSignal = (scan.wires ++ scan.nodes ++ scan.memSignals).toSet ++ outputs ++ constraints ++ bad
-    val signals = scan.connects.filter { case (name, _) => isSignal.contains(name) }.map {
-      case (name, expr) => Signal(name, expr)
+    val signals = scan.connects.filter { case (name, _) => isSignal.contains(name) }.map { case (name, expr) =>
+      Signal(name, expr)
     }
 
     // turn registers and memories into states
     val registers = scan.registers.map(r => r._1 -> r).toMap
-    val regStates = scan.connects.filter(s => registers.contains(s._1)).map {
-      case (name, nextExpr) =>
-        val (_, width, resetExpr, initExpr) = registers(name)
-        onRegister(name, width, resetExpr, initExpr, nextExpr, presetRegs)
+    val regStates = scan.connects.filter(s => registers.contains(s._1)).map { case (name, nextExpr) =>
+      val (_, width, resetExpr, initExpr) = registers(name)
+      onRegister(name, width, resetExpr, initExpr, nextExpr, presetRegs)
     }
     // turn memories into state
     val memoryStatesAndOutputs = scan.memories.map(m => onMemory(m, scan.connects, memInit.get(m.name)))
@@ -193,12 +192,11 @@ private class ModuleToTransitionSystem extends LazyLogging {
 
     // generate comments from infos
     val comments = mutable.HashMap[String, String]()
-    scan.infos.foreach {
-      case (name, info) =>
-        serializeInfo(info).foreach { infoString =>
-          if (comments.contains(name)) { comments(name) += InfoSeparator + infoString }
-          else { comments(name) = InfoPrefix + infoString }
-        }
+    scan.infos.foreach { case (name, info) =>
+      serializeInfo(info).foreach { infoString =>
+        if (comments.contains(name)) { comments(name) += InfoSeparator + infoString }
+        else { comments(name) = InfoPrefix + infoString }
+      }
     }
 
     // inputs are original module inputs and any DefRandom signal
@@ -628,15 +626,14 @@ private object TopologicalSort {
     val known = new mutable.HashSet[String]() ++ globalSignals
     var needsReordering = false
     val digraph = new MutableDiGraph[String]
-    signals.foreach {
-      case (name, expr) =>
-        digraph.addVertex(name)
-        val uniqueDependencies = mutable.LinkedHashSet[String]() ++ findDependencies(expr)
-        uniqueDependencies.foreach { d =>
-          if (!known.contains(d)) { needsReordering = true }
-          digraph.addPairWithEdge(name, d)
-        }
-        known.add(name)
+    signals.foreach { case (name, expr) =>
+      digraph.addVertex(name)
+      val uniqueDependencies = mutable.LinkedHashSet[String]() ++ findDependencies(expr)
+      uniqueDependencies.foreach { d =>
+        if (!known.contains(d)) { needsReordering = true }
+        digraph.addPairWithEdge(name, d)
+      }
+      known.add(name)
     }
     if (needsReordering) {
       Some(digraph.linearize.reverse)

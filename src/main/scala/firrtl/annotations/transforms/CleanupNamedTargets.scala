@@ -56,8 +56,8 @@ class CleanupNamedTargets extends Transform with DependencyAPIMigration {
       case a: SingleTargetAnnotation[_] => Some(a.target)
       case a: MultiTargetAnnotation     => a.targets.flatten
       case _ => None
-    }.collect {
-      case a: ReferenceTarget => a
+    }.collect { case a: ReferenceTarget =>
+      a
     }.toSet
 
     implicit val renameMap = RenameMap()

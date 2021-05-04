@@ -14,11 +14,10 @@ object ClockListUtils {
   /** Returns a list of clock outputs from instances of external modules
     */
   def getSourceList(moduleMap: Map[String, DefModule])(lin: Lineage): Seq[String] = {
-    val s = lin.foldLeft(Seq[String]()) {
-      case (sL, (i, l)) =>
-        val sLx = getSourceList(moduleMap)(l)
-        val sLxx = sLx.map(i + "$" + _)
-        sL ++ sLxx
+    val s = lin.foldLeft(Seq[String]()) { case (sL, (i, l)) =>
+      val sLx = getSourceList(moduleMap)(l)
+      val sLxx = sLx.map(i + "$" + _)
+      sL ++ sLxx
     }
     val sourceList = moduleMap(lin.name) match {
       case ExtModule(i, n, ports, dn, p) =>
@@ -41,9 +40,8 @@ object ClockListUtils {
   ): Map[String, String] = {
     val sep = if (me == "") "" else "$"
     // Get origins from all children
-    val childrenOrigins = lin.foldLeft(Map[String, String]()) {
-      case (o, (i, l)) =>
-        o ++ getOrigins(connects, me + sep + i, moduleMap)(l)
+    val childrenOrigins = lin.foldLeft(Map[String, String]()) { case (o, (i, l)) =>
+      o ++ getOrigins(connects, me + sep + i, moduleMap)(l)
     }
     // If I have a clock, get it
     val clockOpt = moduleMap(lin.name) match {
@@ -54,12 +52,11 @@ object ClockListUtils {
     clockOpt match {
       case Some(clock) =>
         val myOrigin = getOrigin(connects, clock).serialize
-        childrenOrigins.foldLeft(Map(me -> myOrigin)) {
-          case (o, (childInstance, childOrigin)) =>
-            val childrenInstances = lin.children.map { case (instance, _) => me + sep + instance }
-            // If direct child shares my origin, omit it
-            if (childOrigin == myOrigin && childrenInstances.contains(childInstance)) o
-            else o + (childInstance -> childOrigin)
+        childrenOrigins.foldLeft(Map(me -> myOrigin)) { case (o, (childInstance, childOrigin)) =>
+          val childrenInstances = lin.children.map { case (instance, _) => me + sep + instance }
+          // If direct child shares my origin, omit it
+          if (childOrigin == myOrigin && childrenInstances.contains(childInstance)) o
+          else o + (childInstance -> childOrigin)
         }
       case None => childrenOrigins
     }

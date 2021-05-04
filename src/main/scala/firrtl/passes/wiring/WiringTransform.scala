@@ -50,8 +50,8 @@ class WiringTransform extends Transform with DependencyAPIMigration {
     new Wiring(w)
   )
   def execute(state: CircuitState): CircuitState = {
-    val annos = state.annotations.collect {
-      case a @ (_: SinkAnnotation | _: SourceAnnotation) => a
+    val annos = state.annotations.collect { case a @ (_: SinkAnnotation | _: SourceAnnotation) =>
+      a
     }
     annos match {
       case Seq() => state
@@ -73,9 +73,8 @@ class WiringTransform extends Transform with DependencyAPIMigration {
         (sources.size, sinks.size) match {
           case (0, p) => state
           case (s, p) if (p > 0) =>
-            val wis = sources.foldLeft(Seq[WiringInfo]()) {
-              case (seq, (pin, source)) =>
-                seq :+ WiringInfo(source, sinks(pin), pin)
+            val wis = sources.foldLeft(Seq[WiringInfo]()) { case (seq, (pin, source)) =>
+              seq :+ WiringInfo(source, sinks(pin), pin)
             }
             val annosx = state.annotations.filterNot(annos.toSet.contains)
             transforms(wis)

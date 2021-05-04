@@ -7,8 +7,7 @@ import firrtl.{CircuitState, DependencyAPIMigration, MinimumVerilogEmitter, Tran
 import firrtl.options.{Dependency, PreservesAll, StageUtils}
 import firrtl.stage.TransformManager.TransformDependency
 
-/**
-  * Remove Verification Statements
+/** Remove Verification Statements
   *
   * Replaces all verification statements in all modules with the empty statement.
   * This is intended to be required by the Verilog emitter to ensure compatibility

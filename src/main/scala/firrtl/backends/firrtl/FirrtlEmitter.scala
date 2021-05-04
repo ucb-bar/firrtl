@@ -29,15 +29,14 @@ sealed abstract class FirrtlEmitter(form: CircuitForm) extends Transform with Em
     }
     val modMap = circuit.modules.map(m => m.name -> m).toMap
     // Turn each module into it's own circuit with it as the top and all instantied modules as ExtModules
-    circuit.modules.collect {
-      case m: Module =>
-        val instModules = collectInstantiatedModules(m, modMap)
-        val extModules = instModules.map {
-          case Module(info, name, ports, _) => ExtModule(info, name, ports, name, Seq.empty)
-          case ext: ExtModule => ext
-        }
-        val newCircuit = Circuit(m.info, extModules :+ m, m.name)
-        EmittedFirrtlModule(m.name, newCircuit.serialize, outputSuffix)
+    circuit.modules.collect { case m: Module =>
+      val instModules = collectInstantiatedModules(m, modMap)
+      val extModules = instModules.map {
+        case Module(info, name, ports, _) => ExtModule(info, name, ports, name, Seq.empty)
+        case ext: ExtModule => ext
+      }
+      val newCircuit = Circuit(m.info, extModules :+ m, m.name)
+      EmittedFirrtlModule(m.name, newCircuit.serialize, outputSuffix)
     }
   }
 

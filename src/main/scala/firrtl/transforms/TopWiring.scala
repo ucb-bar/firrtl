@@ -45,9 +45,8 @@ class TopWiringTransform extends Transform with DependencyAPIMigration {
 
   /** Get the names of the targets that need to be wired */
   private def getSourceNames(state: CircuitState): Map[ComponentName, String] = {
-    state.annotations.collect {
-      case TopWiringAnnotation(srcname, prefix) =>
-        (srcname -> prefix)
+    state.annotations.collect { case TopWiringAnnotation(srcname, prefix) =>
+      (srcname -> prefix)
     }.toMap.withDefaultValue("")
   }
 
@@ -140,9 +139,8 @@ class TopWiringTransform extends Transform with DependencyAPIMigration {
     val sSourcesModNames = getSourceModNames(state)
     val sSourcesNames = getSourceNames(state)
     val instGraph = firrtl.analyses.InstanceKeyGraph(state.circuit)
-    val cMap = instGraph.getChildInstances.map {
-      case (m, wdis) =>
-        (m -> wdis.map { case wdi => (wdi.name, wdi.module) }.toSeq)
+    val cMap = instGraph.getChildInstances.map { case (m, wdis) =>
+      (m -> wdis.map { case wdi => (wdi.name, wdi.module) }.toSeq)
     }.toMap
     val topSort = instGraph.moduleOrder.reverse
 
@@ -208,37 +206,36 @@ class TopWiringTransform extends Transform with DependencyAPIMigration {
         val childInstances = instgraph.getChildInstances.toMap
         module match {
           case m: Module =>
-            val connections: Seq[Connect] = p.map {
-              case (ComponentName(cname, _), _, _, path, prefix) =>
-                val modRef = portnamesmap.get(prefix + path.mkString("_")) match {
-                  case Some(pn) => WRef(pn)
-                  case None => {
-                    portnamesmap(prefix + path.mkString("_")) = namespace.newName(prefix + path.mkString("_"))
-                    WRef(portnamesmap(prefix + path.mkString("_")))
-                  }
+            val connections: Seq[Connect] = p.map { case (ComponentName(cname, _), _, _, path, prefix) =>
+              val modRef = portnamesmap.get(prefix + path.mkString("_")) match {
+                case Some(pn) => WRef(pn)
+                case None => {
+                  portnamesmap(prefix + path.mkString("_")) = namespace.newName(prefix + path.mkString("_"))
+                  WRef(portnamesmap(prefix + path.mkString("_")))
                 }
-                path.size match {
-                  case 1 => {
-                    val leafRef = WRef(path.head.mkString(""))
-                    Connect(NoInfo, modRef, leafRef)
-                  }
-                  case _ => {
-                    val instportname = portnamesmap.get(prefix + path.tail.mkString("_")) match {
-                      case Some(ipn) => ipn
-                      case None => {
-                        val instmod = childInstances(module.name).collectFirst {
-                          case wdi if wdi.name == path.head => wdi.module
-                        }.get
-                        val instnamespace = namespacemap(instmod)
-                        portnamesmap(prefix + path.tail.mkString("_")) =
-                          instnamespace.newName(prefix + path.tail.mkString("_"))
-                        portnamesmap(prefix + path.tail.mkString("_"))
-                      }
+              }
+              path.size match {
+                case 1 => {
+                  val leafRef = WRef(path.head.mkString(""))
+                  Connect(NoInfo, modRef, leafRef)
+                }
+                case _ => {
+                  val instportname = portnamesmap.get(prefix + path.tail.mkString("_")) match {
+                    case Some(ipn) => ipn
+                    case None => {
+                      val instmod = childInstances(module.name).collectFirst {
+                        case wdi if wdi.name == path.head => wdi.module
+                      }.get
+                      val instnamespace = namespacemap(instmod)
+                      portnamesmap(prefix + path.tail.mkString("_")) =
+                        instnamespace.newName(prefix + path.tail.mkString("_"))
+                      portnamesmap(prefix + path.tail.mkString("_"))
                     }
-                    val instRef = WSubField(WRef(path.head), instportname)
-                    Connect(NoInfo, modRef, instRef)
                   }
+                  val instRef = WSubField(WRef(path.head), instportname)
+                  Connect(NoInfo, modRef, instRef)
                 }
+              }
             }
             m.copy(ports = m.ports ++ newPorts, body = Block(Seq(m.body) ++ connections))
           case e: ExtModule =>
@@ -261,8 +258,8 @@ class TopWiringTransform extends Transform with DependencyAPIMigration {
 
     val outputTuples: Seq[
       (String, (String, Seq[((ComponentName, Type, Boolean, InstPath, String), Int)], CircuitState) => CircuitState)
-    ] = state.annotations.collect {
-      case TopWiringOutputFilesAnnotation(td, of) => (td, of)
+    ] = state.annotations.collect { case TopWiringOutputFilesAnnotation(td, of) =>
+      (td, of)
     }
     // Do actual work of this transform
     val sources = getSourcesMap(state)

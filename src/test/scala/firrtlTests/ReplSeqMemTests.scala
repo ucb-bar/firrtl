@@ -162,8 +162,8 @@ circuit CustomMemory :
 
   "ReplSeqMem Utility -- getConnectOrigin" should
     "determine connect origin across nodes/PrimOps even if ConstProp isn't performed" in {
-    def checkConnectOrigin(hurdle: String, origin: String) = {
-      val input = s"""
+      def checkConnectOrigin(hurdle: String, origin: String) = {
+        val input = s"""
 circuit Top :
   module Top :
     input a: UInt<1>
@@ -176,35 +176,35 @@ circuit Top :
     f <= c
 """.stripMargin
 
-      val circuit = InferTypes.run(ToWorkingIR.run(parse(input)))
-      val m = circuit.modules.head.asInstanceOf[ir.Module]
-      val connects = AnalysisUtils.getConnects(m)
-      val calculatedOrigin = AnalysisUtils.getOrigin(connects, "f").serialize
-      require(calculatedOrigin == origin, s"getConnectOrigin returns incorrect origin $calculatedOrigin !")
+        val circuit = InferTypes.run(ToWorkingIR.run(parse(input)))
+        val m = circuit.modules.head.asInstanceOf[ir.Module]
+        val connects = AnalysisUtils.getConnects(m)
+        val calculatedOrigin = AnalysisUtils.getOrigin(connects, "f").serialize
+        require(calculatedOrigin == origin, s"getConnectOrigin returns incorrect origin $calculatedOrigin !")
+      }
+
+      val tests = List(
+        """mux(a, UInt<1>("h1"), UInt<1>("h0"))""" -> "a",
+        """mux(UInt<1>("h1"), a, b)""" -> "a",
+        """mux(UInt<1>("h0"), a, b)""" -> "b",
+        "mux(b, a, a)" -> "a",
+        """mux(a, a, UInt<1>("h0"))""" -> "a",
+        "mux(a, b, e)" -> "mux(a, b, e)",
+        """or(a, UInt<1>("h1"))""" -> """UInt<1>("h1")""",
+        """and(a, UInt<1>("h0"))""" -> """UInt<1>("h0")""",
+        """UInt<1>("h1")""" -> """UInt<1>("h1")""",
+        "asUInt(a)" -> "a",
+        "asSInt(a)" -> "a",
+        "asClock(a)" -> "a",
+        "a" -> "a",
+        "or(a, b)" -> "or(a, b)",
+        "bits(a, 0, 0)" -> "a",
+        "validif(a, b)" -> "b"
+      )
+
+      tests.foreach { case (hurdle, origin) => checkConnectOrigin(hurdle, origin) }
+
     }
-
-    val tests = List(
-      """mux(a, UInt<1>("h1"), UInt<1>("h0"))""" -> "a",
-      """mux(UInt<1>("h1"), a, b)""" -> "a",
-      """mux(UInt<1>("h0"), a, b)""" -> "b",
-      "mux(b, a, a)" -> "a",
-      """mux(a, a, UInt<1>("h0"))""" -> "a",
-      "mux(a, b, e)" -> "mux(a, b, e)",
-      """or(a, UInt<1>("h1"))""" -> """UInt<1>("h1")""",
-      """and(a, UInt<1>("h0"))""" -> """UInt<1>("h0")""",
-      """UInt<1>("h1")""" -> """UInt<1>("h1")""",
-      "asUInt(a)" -> "a",
-      "asSInt(a)" -> "a",
-      "asClock(a)" -> "a",
-      "a" -> "a",
-      "or(a, b)" -> "or(a, b)",
-      "bits(a, 0, 0)" -> "a",
-      "validif(a, b)" -> "b"
-    )
-
-    tests.foreach { case (hurdle, origin) => checkConnectOrigin(hurdle, origin) }
-
-  }
 
   "ReplSeqMem" should "not de-duplicate memories with the nodedupe annotation " in {
     val input = """

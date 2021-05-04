@@ -193,8 +193,8 @@ abstract class PrimOp extends FirrtlNode {
       case x: Int        => "int"
       case other => "other"
     }
-    val exprs = groups.getOrElse("exp", Nil).collect {
-      case e: Expression => e
+    val exprs = groups.getOrElse("exp", Nil).collect { case e: Expression =>
+      e
     }
     val consts = groups.getOrElse("int", Nil).map {
       _ match {

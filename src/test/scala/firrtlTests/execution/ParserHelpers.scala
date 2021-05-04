@@ -8,8 +8,7 @@ import firrtl.ir._
 class ParserHelperException(val pe: ParserException, input: String)
     extends FirrtlUserException(s"Got error ${pe.toString} while parsing input:\n${input}")
 
-/**
-  * A utility class that parses a FIRRTL string representing a statement to a sub-AST
+/** A utility class that parses a FIRRTL string representing a statement to a sub-AST
   */
 object ParseStatement {
   private def wrapStmtStr(stmtStr: String): String = {
@@ -39,8 +38,7 @@ object ParseStatement {
   private[execution] def makeDUT(body: String): Circuit = parse(body)
 }
 
-/**
-  * A utility class that parses a FIRRTL string representing an expression to a sub-AST
+/** A utility class that parses a FIRRTL string representing an expression to a sub-AST
   */
 object ParseExpression {
   def apply(expStr: String): Expression = {

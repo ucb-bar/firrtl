@@ -129,14 +129,13 @@ object Uniquify extends Transform with DependencyAPIMigration {
       case (fromx: BundleType, tox: BundleType) =>
         (fromx.fields
           .zip(tox.fields)
-          .flatMap {
-            case (f, t) =>
-              val eltsMap = createNameMapping(f.tpe, t.tpe)
-              if ((f.name != t.name) || eltsMap.nonEmpty) {
-                Map(f.name -> NameMapNode(t.name, eltsMap))
-              } else {
-                Map[String, NameMapNode]()
-              }
+          .flatMap { case (f, t) =>
+            val eltsMap = createNameMapping(f.tpe, t.tpe)
+            if ((f.name != t.name) || eltsMap.nonEmpty) {
+              Map(f.name -> NameMapNode(t.name, eltsMap))
+            } else {
+              Map[String, NameMapNode]()
+            }
           })
           .toMap
       case (fromx: VectorType, tox: VectorType) =>
@@ -301,8 +300,8 @@ object Uniquify extends Transform with DependencyAPIMigration {
               (Utils
                 .create_exps(sx.name, s.asInstanceOf[DefNode].value.tpe)
                 .zip(Utils.create_exps(node.name, sx.value.tpe)))
-                .foreach {
-                  case (from, to) => renames.rename(from.serialize, to.serialize)
+                .foreach { case (from, to) =>
+                  renames.rename(from.serialize, to.serialize)
                 }
               DefNode(sx.info, node.name, sx.value)
             } else {
@@ -337,20 +336,19 @@ object Uniquify extends Transform with DependencyAPIMigration {
     def uniquifyPorts(renames: RenameMap)(m: DefModule): DefModule = {
       renames.setModule(m.name)
       def uniquifyPorts(ports: Seq[Port]): Seq[Port] = {
-        val portsType = BundleType(ports.map {
-          case Port(_, name, dir, tpe) => Field(name, to_flip(dir), tpe)
+        val portsType = BundleType(ports.map { case Port(_, name, dir, tpe) =>
+          Field(name, to_flip(dir), tpe)
         })
         val uniquePortsType = uniquifyNames(portsType, collection.mutable.HashSet())
         val localMap = createNameMapping(portsType, uniquePortsType)
         portNameMap += (m.name -> localMap)
         portTypeMap += (m.name -> uniquePortsType)
 
-        ports.zip(uniquePortsType.fields).map {
-          case (p, f) =>
-            (Utils.create_exps(p.name, p.tpe).zip(Utils.create_exps(f.name, f.tpe))).foreach {
-              case (from, to) => renames.rename(from.serialize, to.serialize)
-            }
-            Port(p.info, f.name, p.direction, f.tpe)
+        ports.zip(uniquePortsType.fields).map { case (p, f) =>
+          (Utils.create_exps(p.name, p.tpe).zip(Utils.create_exps(f.name, f.tpe))).foreach { case (from, to) =>
+            renames.rename(from.serialize, to.serialize)
+          }
+          Port(p.info, f.name, p.direction, f.tpe)
         }
       }
 

@@ -124,9 +124,8 @@ object LowerTypes extends Transform with DependencyAPIMigration {
     val loweredPortsAndRefs = m.ports.flatMap { p =>
       val fieldsAndRefs =
         DestructTypes.destruct(ref, Field(p.name, Utils.to_flip(p.direction), p.tpe), namespace, renameMap, Set())
-      fieldsAndRefs.map {
-        case (f, ref) =>
-          (Port(p.info, f.name, Utils.to_dir(f.flip), f.tpe), ref -> Seq(Reference(f.name, f.tpe, PortKind)))
+      fieldsAndRefs.map { case (f, ref) =>
+        (Port(p.info, f.name, Utils.to_dir(f.flip), f.tpe), ref -> Seq(Reference(f.name, f.tpe, PortKind)))
       }
     }
     val newM = m match {
@@ -152,16 +151,14 @@ object LowerTypes extends Transform with DependencyAPIMigration {
       // It is important to first lower the declaration, because the reset can refer to the register itself!
       val loweredRegs = symbols.lower(d.name, d.tpe, firrtl.RegKind)
       val inits = Utils.create_exps(d.init).map(onExpression)
-      Block(loweredRegs.zip(inits).map {
-        case ((name, tpe, _), init) =>
-          DefRegister(info, name, tpe, loweredClock, loweredReset, init)
+      Block(loweredRegs.zip(inits).map { case ((name, tpe, _), init) =>
+        DefRegister(info, name, tpe, loweredClock, loweredReset, init)
       })
     case d: DefNode =>
       val values = Utils.create_exps(d.value).map(onExpression)
-      Block(symbols.lower(d.name, d.value.tpe, firrtl.NodeKind).zip(values).map {
-        case ((name, tpe, _), value) =>
-          assert(tpe == value.tpe)
-          DefNode(d.info, name, value)
+      Block(symbols.lower(d.name, d.value.tpe, firrtl.NodeKind).zip(values).map { case ((name, tpe, _), value) =>
+        assert(tpe == value.tpe)
+        DefNode(d.info, name, value)
       })
     case d: DefMemory =>
       // TODO: as an optimization, we could just skip ground type memories here.
@@ -361,50 +358,49 @@ private object DestructTypes {
     // the "old dummy field" is used as a template for the new memory port types
     val oldDummyField = Field("dummy", Default, MemPortUtils.memType(mem.copy(dataType = BoolType)))
 
-    val newMemAndSubFields = res.map {
-      case (field, refs) =>
-        val newMem = mem.copy(name = field.name, dataType = field.tpe)
-        val newMemRef = m.ref(field.name)
-        val memWasRenamed = field.name != mem.name // false iff the dataType was a GroundType
-        if (memWasRenamed) { renameMap.record(oldMemRef, newMemRef) }
+    val newMemAndSubFields = res.map { case (field, refs) =>
+      val newMem = mem.copy(name = field.name, dataType = field.tpe)
+      val newMemRef = m.ref(field.name)
+      val memWasRenamed = field.name != mem.name // false iff the dataType was a GroundType
+      if (memWasRenamed) { renameMap.record(oldMemRef, newMemRef) }
 
-        val newMemReference = Reference(field.name, MemPortUtils.memType(newMem), MemKind)
-        val refSuffixes = refs.map(_.component).filterNot(_.isEmpty)
+      val newMemReference = Reference(field.name, MemPortUtils.memType(newMem), MemKind)
+      val refSuffixes = refs.map(_.component).filterNot(_.isEmpty)
 
-        val subFields = oldDummyField.tpe.asInstanceOf[BundleType].fields.flatMap { port =>
-          val oldPortRef = oldMemRef.field(port.name)
-          val newPortRef = newMemRef.field(port.name)
+      val subFields = oldDummyField.tpe.asInstanceOf[BundleType].fields.flatMap { port =>
+        val oldPortRef = oldMemRef.field(port.name)
+        val newPortRef = newMemRef.field(port.name)
 
-          val newPortType = newMemReference.tpe.asInstanceOf[BundleType].fields.find(_.name == port.name).get.tpe
-          val newPortAccess = SubField(newMemReference, port.name, newPortType)
+        val newPortType = newMemReference.tpe.asInstanceOf[BundleType].fields.find(_.name == port.name).get.tpe
+        val newPortAccess = SubField(newMemReference, port.name, newPortType)
 
-          port.tpe.asInstanceOf[BundleType].fields.map { portField =>
-            val isDataField = portField.name == "data" || portField.name == "wdata" || portField.name == "rdata"
-            val isMaskField = portField.name == "mask" || portField.name == "wmask"
-            val isDataOrMaskField = isDataField || isMaskField
-            val oldFieldRefs = if (memWasRenamed && isDataOrMaskField) {
-              // there might have been multiple different fields which now alias to the same lowered field.
-              val oldPortFieldBaseRef = oldPortRef.field(portField.name)
-              refSuffixes.map(s => oldPortFieldBaseRef.copy(component = oldPortFieldBaseRef.component ++ s))
-            } else {
-              List(oldPortRef.field(portField.name))
-            }
-
-            val newPortType = if (isDataField) { newMem.dataType }
-            else { portField.tpe }
-            val newPortFieldAccess = SubField(newPortAccess, portField.name, newPortType)
-
-            // record renames only for the data field which is the only port field of non-ground type
-            val newPortFieldRef = newPortRef.field(portField.name)
-            if (memWasRenamed && isDataOrMaskField) {
-              oldFieldRefs.foreach { o => renameMap.record(o, newPortFieldRef) }
-            }
-
-            val oldFieldStringRef = extractGroundTypeRefString(oldFieldRefs)
-            (oldFieldStringRef, newPortFieldAccess)
+        port.tpe.asInstanceOf[BundleType].fields.map { portField =>
+          val isDataField = portField.name == "data" || portField.name == "wdata" || portField.name == "rdata"
+          val isMaskField = portField.name == "mask" || portField.name == "wmask"
+          val isDataOrMaskField = isDataField || isMaskField
+          val oldFieldRefs = if (memWasRenamed && isDataOrMaskField) {
+            // there might have been multiple different fields which now alias to the same lowered field.
+            val oldPortFieldBaseRef = oldPortRef.field(portField.name)
+            refSuffixes.map(s => oldPortFieldBaseRef.copy(component = oldPortFieldBaseRef.component ++ s))
+          } else {
+            List(oldPortRef.field(portField.name))
           }
+
+          val newPortType = if (isDataField) { newMem.dataType }
+          else { portField.tpe }
+          val newPortFieldAccess = SubField(newPortAccess, portField.name, newPortType)
+
+          // record renames only for the data field which is the only port field of non-ground type
+          val newPortFieldRef = newPortRef.field(portField.name)
+          if (memWasRenamed && isDataOrMaskField) {
+            oldFieldRefs.foreach { o => renameMap.record(o, newPortFieldRef) }
+          }
+
+          val oldFieldStringRef = extractGroundTypeRefString(oldFieldRefs)
+          (oldFieldStringRef, newPortFieldAccess)
         }
-        (newMem, subFields)
+      }
+      (newMem, subFields)
     }
 
     (newMemAndSubFields.map(_._1), newMemAndSubFields.flatMap(_._2))
@@ -424,10 +420,9 @@ private object DestructTypes {
     parent:      ParentRef
   ): Unit = {
     // TODO: if we group by ReferenceTarget, we could reduce the number of calls to `record`. Is it worth it?
-    fieldToRefs.foreach {
-      case (field, refs) =>
-        val fieldRef = parent.ref(field.name)
-        refs.foreach { r => renameMap.record(r, fieldRef) }
+    fieldToRefs.foreach { case (field, refs) =>
+      val fieldRef = parent.ref(field.name)
+      refs.foreach { r => renameMap.record(r, fieldRef) }
     }
   }
 

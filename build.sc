@@ -103,12 +103,18 @@ class firrtlCrossModule(val crossScalaVersion: String) extends CrossSbtModule wi
   }
 
   def generatedAntlr4Source = T.sources {
-    os.proc("java",
-      "-jar", downloadAntlr4Jar().path.toString,
-      "-o", T.ctx.dest.toString,
-      "-lib", antlrSource().path.toString,
-      "-package", "firrtl.antlr",
-      "-no-listener", "-visitor",
+    os.proc(
+      "java",
+      "-jar",
+      downloadAntlr4Jar().path.toString,
+      "-o",
+      T.ctx.dest.toString,
+      "-lib",
+      antlrSource().path.toString,
+      "-package",
+      "firrtl.antlr",
+      "-no-listener",
+      "-visitor",
       antlrSource().path.toString
     ).call()
     T.ctx.dest

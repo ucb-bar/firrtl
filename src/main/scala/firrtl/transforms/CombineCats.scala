@@ -80,8 +80,8 @@ class CombineCats extends Transform with DependencyAPIMigration {
     val run = !state.annotations.contains(PrettyNoExprInlining)
 
     if (run) {
-      val maxCatLen = state.annotations.collectFirst {
-        case m: MaxCatLenAnnotation => m.maxCatLen
+      val maxCatLen = state.annotations.collectFirst { case m: MaxCatLenAnnotation =>
+        m.maxCatLen
       }.getOrElse(defaultMaxCatLen)
 
       val modulesx = state.circuit.modules.map(CombineCats.onMod(maxCatLen))

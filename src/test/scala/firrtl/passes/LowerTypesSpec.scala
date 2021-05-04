@@ -375,8 +375,8 @@ class LowerTypesOfMemorySpec extends AnyFlatSpec {
   }
 
   it should "still produce reference lookups, even for a ground type memory with no conflicts" in {
-    val nameToRef = lower("mem", "UInt<1>", Set("mem_r", "mem_r_data"), w = Seq("w")).refs.map {
-      case (n, r) => n -> r.serialize
+    val nameToRef = lower("mem", "UInt<1>", Set("mem_r", "mem_r_data"), w = Seq("w")).refs.map { case (n, r) =>
+      n -> r.serialize
     }.toSet
 
     assert(
@@ -528,8 +528,8 @@ class LowerTypesOfMemorySpec extends AnyFlatSpec {
   }
 
   it should "return a name to RefLikeExpression map for a memory with a nested data type" in {
-    val nameToRef = lower("mem", "{ a : UInt<1>, b : { c : UInt<1>} }", Set("mem_a")).refs.map {
-      case (n, r) => n -> r.serialize
+    val nameToRef = lower("mem", "{ a : UInt<1>, b : { c : UInt<1>} }", Set("mem_a")).refs.map { case (n, r) =>
+      n -> r.serialize
     }.toSet
 
     assert(

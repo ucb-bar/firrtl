@@ -50,20 +50,23 @@ trait ExprGen[E <: Expression] { self =>
     def name = self.name
 
     private def wrap[S: ExprState, G[_]: GenMonad](
-      name: String,
-      tpe: Type,
-      stateGen: StateGen[S, G, E]): StateGen[S, G, E] = {
+      name:     String,
+      tpe:      Type,
+      stateGen: StateGen[S, G, E]
+    ): StateGen[S, G, E] = {
       StateGen { (s: S) =>
-        GenMonad[G].choose(0, 1).map ( _ =>
-          try {
-            GenMonad[G].generate(stateGen.run(s))
-          } catch {
-            case e: ExprGen.TraceException if e.trace.size < 10 =>
-              throw e.copy(trace = s"$name: ${tpe.serialize}" +: e.trace)
-            case e: IllegalArgumentException =>
-              throw ExprGen.TraceException(Seq(s"$name: ${tpe.serialize}"), e)
-          }
-        )
+        GenMonad[G]
+          .choose(0, 1)
+          .map(_ =>
+            try {
+              GenMonad[G].generate(stateGen.run(s))
+            } catch {
+              case e: ExprGen.TraceException if e.trace.size < 10 =>
+                throw e.copy(trace = s"$name: ${tpe.serialize}" +: e.trace)
+              case e: IllegalArgumentException =>
+                throw ExprGen.TraceException(Seq(s"$name: ${tpe.serialize}"), e)
+            }
+          )
       }
     }
 
@@ -112,16 +115,18 @@ object ExprGen {
     sw.toString
   }
 
-  case class TraceException(trace: Seq[String], cause: Throwable) extends Exception(
-    s"cause: ${printStack(cause)}\ntrace:\n${trace.reverse.mkString("\n")}\n"
-  )
+  case class TraceException(trace: Seq[String], cause: Throwable)
+      extends Exception(
+        s"cause: ${printStack(cause)}\ntrace:\n${trace.reverse.mkString("\n")}\n"
+      )
 
-  def genWidth[G[_]: GenMonad](min: Int, max: Int): G[IntWidth] = GenMonad[G].choose(min, max).map(IntWidth(_))
+  def genWidth[G[_]:    GenMonad](min: Int, max: Int): G[IntWidth] = GenMonad[G].choose(min, max).map(IntWidth(_))
   def genWidthMax[G[_]: GenMonad](max: Int): G[IntWidth] = genWidth(1, max)
 
   private def makeBinDoPrimStateGen[S: ExprState, G[_]: GenMonad](
-    primOp: PrimOp,
-    typeGen: Int => G[(Type, Type, Type)]): StateGen[S, G, DoPrim] = {
+    primOp:  PrimOp,
+    typeGen: Int => G[(Type, Type, Type)]
+  ): StateGen[S, G, DoPrim] = {
     for {
       t <- StateGen.inspectG((s: S) => typeGen(ExprState[S].maxWidth(s)))
       (tpe1, tpe2, exprTpe) = t
@@ -133,8 +138,9 @@ object ExprGen {
   }
 
   private def makeUnaryDoPrimStateGen[S: ExprState, G[_]: GenMonad](
-    primOp: PrimOp,
-    typeGen: Int => G[(Type, Type)]): StateGen[S, G, DoPrim] = {
+    primOp:  PrimOp,
+    typeGen: Int => G[(Type, Type)]
+  ): StateGen[S, G, DoPrim] = {
     for {
       p <- StateGen.inspectG((s: S) => typeGen(ExprState[S].maxWidth(s)))
       (tpe1, exprTpe) = p
@@ -159,16 +165,15 @@ object ExprGen {
     }
   }
 
-
   object ReferenceGen extends ExprGen[Reference] {
     def name = "Ref"
     def boolUIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, Reference]] = uintGen.map(_(1))
-    def uintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, Reference]] = Some { width =>
+    def uintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, Reference]] = Some { width =>
       referenceGenImp(UIntType(IntWidth(width)))
     }
 
-    def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, Reference]]  = sintGen.map(_(1))
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, Reference]] = Some { width =>
+    def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, Reference]] = sintGen.map(_(1))
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, Reference]] = Some { width =>
       referenceGenImp(SIntType(IntWidth(width)))
     }
 
@@ -186,12 +191,12 @@ object ExprGen {
   object LiteralGen extends ExprGen[Literal] {
     def name = "Literal"
     def boolUIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, Literal]] = uintGen.map(_(1))
-    def uintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, Literal]] = Some { width =>
+    def uintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, Literal]] = Some { width =>
       uintLiteralGenImp(width)
     }
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, Literal]] = sintGen.map(_(1))
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, Literal]] = Some { width =>
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, Literal]] = Some { width =>
       sintLiteralGenImp(width)
     }
 
@@ -280,10 +285,10 @@ object ExprGen {
     }
 
     def boolUIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def uintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = true)
+    def uintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = true)
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = false)
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = false)
   }
 
   object DivDoPrimGen extends DoPrimGen(PrimOps.Div) {
@@ -301,10 +306,10 @@ object ExprGen {
     }
 
     def boolUIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def uintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = true)
+    def uintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = true)
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = false)
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = false)
   }
 
   object RemDoPrimGen extends DoPrimGen(PrimOps.Rem) {
@@ -325,10 +330,10 @@ object ExprGen {
     }
 
     def boolUIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = uintGen.map(_(1))
-    def uintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = true)
+    def uintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = true)
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = sintGen.map(_(1))
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = false)
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = false)
   }
 
   abstract class CmpDoPrimGen(primOp: PrimOp) extends DoPrimGen(primOp) {
@@ -345,7 +350,7 @@ object ExprGen {
     def uintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
   }
   object LtDoPrimGen extends CmpDoPrimGen(PrimOps.Lt)
   object LeqDoPrimGen extends CmpDoPrimGen(PrimOps.Leq)
@@ -369,10 +374,10 @@ object ExprGen {
     }
 
     def boolUIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = uintGen.map(_(1))
-    def uintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = true)
+    def uintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = true)
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = sintGen.map(_(1))
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = false)
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = false)
   }
 
   object ShlDoPrimGen extends DoPrimGen(PrimOps.Shl) {
@@ -390,10 +395,10 @@ object ExprGen {
     }
 
     def boolUIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def uintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = true)
+    def uintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = true)
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = false)
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = false)
   }
 
   object ShrDoPrimGen extends DoPrimGen(PrimOps.Shr) {
@@ -415,10 +420,10 @@ object ExprGen {
     }
 
     def boolUIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = uintGen.map(_(1))
-    def uintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = true)
+    def uintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = true)
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = sintGen.map(_(1))
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = false)
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = false)
   }
 
   object DshlDoPrimGen extends DoPrimGen(PrimOps.Dshl) {
@@ -438,10 +443,10 @@ object ExprGen {
     }
 
     def boolUIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def uintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = true)
+    def uintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = true)
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = false)
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = false)
   }
 
   object DshrDoPrimGen extends DoPrimGen(PrimOps.Dshr) {
@@ -458,15 +463,15 @@ object ExprGen {
     }
 
     def boolUIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = uintGen.map(_(1))
-    def uintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = true)
+    def uintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = true)
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = sintGen.map(_(1))
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = false)
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = imp(isUInt = false)
   }
 
   object CvtDoPrimGen extends DoPrimGen(PrimOps.Cvt) {
     def boolUIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def uintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
+    def uintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = {
       Some {
@@ -496,7 +501,7 @@ object ExprGen {
 
   object NegDoPrimGen extends DoPrimGen(PrimOps.Neg) {
     def boolUIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def uintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
+    def uintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
     def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = {
@@ -535,7 +540,7 @@ object ExprGen {
     }
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
   }
 
   abstract class BitwiseDoPrimGen(primOp: PrimOp) extends DoPrimGen(primOp) {
@@ -557,7 +562,7 @@ object ExprGen {
     }
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
   }
   object AndDoPrimGen extends BitwiseDoPrimGen(PrimOps.And)
   object OrDoPrimGen extends BitwiseDoPrimGen(PrimOps.Or)
@@ -578,7 +583,7 @@ object ExprGen {
     def uintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
   }
   object AndrDoPrimGen extends ReductionDoPrimGen(PrimOps.Andr)
   object OrrDoPrimGen extends ReductionDoPrimGen(PrimOps.Orr)
@@ -603,7 +608,7 @@ object ExprGen {
     }
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
   }
 
   object BitsDoPrimGen extends DoPrimGen(PrimOps.Bits) {
@@ -622,7 +627,7 @@ object ExprGen {
     }
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
   }
 
   object HeadDoPrimGen extends DoPrimGen(PrimOps.Head) {
@@ -640,7 +645,7 @@ object ExprGen {
     }
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
   }
 
   object TailDoPrimGen extends DoPrimGen(PrimOps.Tail) {
@@ -649,11 +654,12 @@ object ExprGen {
       Some { totalWidth =>
         for {
           maxWidth <- StateGen.inspect((s: S) => ExprState[S].maxWidth(s))
-          tailNum <- if (totalWidth < BigInt(maxWidth)) {
-            StateGen.liftG[S, G, Int](GenMonad[G].choose(1, maxWidth - totalWidth.toInt))
-          } else {
-            StateGen.pure[S, G, Int](0)
-          }
+          tailNum <-
+            if (totalWidth < BigInt(maxWidth)) {
+              StateGen.liftG[S, G, Int](GenMonad[G].choose(1, maxWidth - totalWidth.toInt))
+            } else {
+              StateGen.pure[S, G, Int](0)
+            }
           tpe <- StateGen.liftG(GenMonad[G].oneOf(UIntType(_), SIntType(_)))
           arg <- ExprState[S].exprGen(tpe(IntWidth(totalWidth + tailNum)))
         } yield {
@@ -663,7 +669,7 @@ object ExprGen {
     }
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
   }
 
   object AsUIntDoPrimGen extends DoPrimGen(PrimOps.AsUInt) {
@@ -681,12 +687,12 @@ object ExprGen {
     }
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
+    def sintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
   }
 
   object AsSIntDoPrimGen extends DoPrimGen(PrimOps.AsSInt) {
     def boolUIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = None
-    def uintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
+    def uintGen[S:     ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = None
 
     def boolSIntGen[S: ExprState, G[_]: GenMonad]: Option[StateGen[S, G, DoPrim]] = sintGen.map(_(1))
     def sintGen[S: ExprState, G[_]: GenMonad]: Option[Width => StateGen[S, G, DoPrim]] = {

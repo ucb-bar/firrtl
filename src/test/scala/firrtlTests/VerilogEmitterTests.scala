@@ -481,8 +481,8 @@ class VerilogEmitterSpec extends FirrtlFlatSpec {
       )
     )
     CircuitState(
-      annotations.collectFirst {
-        case FirrtlCircuitAnnotation(circuit) => circuit
+      annotations.collectFirst { case FirrtlCircuitAnnotation(circuit) =>
+        circuit
       }.get,
       annotations
     ) should containLines(check: _*)

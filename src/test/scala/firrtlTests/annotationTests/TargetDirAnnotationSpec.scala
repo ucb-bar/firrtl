@@ -17,8 +17,8 @@ class FindTargetDirTransform extends Transform {
   def outputForm = HighForm
 
   def execute(state: CircuitState): CircuitState = {
-    val a: Option[Annotation] = state.annotations.collectFirst {
-      case TargetDirAnnotation("a/b/c") => FoundTargetDirTransformFoundTargetDirAnnotation
+    val a: Option[Annotation] = state.annotations.collectFirst { case TargetDirAnnotation("a/b/c") =>
+      FoundTargetDirTransformFoundTargetDirAnnotation
     }
     state.copy(annotations = state.annotations ++ a ++ Some(FoundTargetDirTransformRanAnnotation))
   }

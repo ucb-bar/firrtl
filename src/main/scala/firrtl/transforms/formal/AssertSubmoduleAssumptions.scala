@@ -8,8 +8,7 @@ import firrtl.{CircuitState, DependencyAPIMigration, Transform}
 import firrtl.annotations.NoTargetAnnotation
 import firrtl.options.{PreservesAll, RegisteredTransform, ShellOption}
 
-/**
-  * Assert Submodule Assumptions
+/** Assert Submodule Assumptions
   *
   * Converts `assume` statements to `assert` statements in all modules except
   * the top module being compiled. This avoids a class of bugs in which an

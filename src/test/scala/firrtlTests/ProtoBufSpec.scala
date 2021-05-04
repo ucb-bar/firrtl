@@ -239,11 +239,10 @@ class ProtoBufSpec extends FirrtlFlatSpec {
       "test\\]test" -> "test]test"
     )
 
-    pairs.foreach {
-      case (escaped, unescaped) =>
-        val info = ir.FileInfo(escaped)
-        ToProto.convert(info).build().getText should equal(unescaped)
-        FromProto.convert(ToProto.convert(info).build) should equal(info)
+    pairs.foreach { case (escaped, unescaped) =>
+      val info = ir.FileInfo(escaped)
+      ToProto.convert(info).build().getText should equal(unescaped)
+      FromProto.convert(ToProto.convert(info).build) should equal(info)
     }
   }
 }

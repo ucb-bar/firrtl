@@ -126,24 +126,24 @@ class ParserSpec extends FirrtlFlatSpec {
   it should "allow source locators with same-line reset" in {
     import RegTests._
     val res = firrtl.Parser.parse((prelude :+ s"${reg} with : (${reset}) $finfo" :+ "    wire a : UInt"))
-    CircuitState(res, Nil) should containTree {
-      case DefRegister(`fileInfo`, `regName`, _, _, _, _) => true
+    CircuitState(res, Nil) should containTree { case DefRegister(`fileInfo`, `regName`, _, _, _, _) =>
+      true
     }
   }
 
   it should "allow source locators with multi-line reset" in {
     import RegTests._
     val res = firrtl.Parser.parse((prelude :+ s"${reg} with :\n      (${reset}) $finfo"))
-    CircuitState(res, Nil) should containTree {
-      case DefRegister(`fileInfo`, `regName`, _, _, _, _) => true
+    CircuitState(res, Nil) should containTree { case DefRegister(`fileInfo`, `regName`, _, _, _, _) =>
+      true
     }
   }
 
   it should "allow source locators with no reset" in {
     import RegTests._
     val res = firrtl.Parser.parse((prelude :+ s"${reg} $finfo"))
-    CircuitState(res, Nil) should containTree {
-      case DefRegister(`fileInfo`, `regName`, _, _, _, _) => true
+    CircuitState(res, Nil) should containTree { case DefRegister(`fileInfo`, `regName`, _, _, _, _) =>
+      true
     }
   }
 
@@ -350,16 +350,15 @@ class ParserPropSpec extends FirrtlPropSpec {
   } yield xs.mkString
 
   property("Bundle fields should allow [A-Za-z0-9_] including starting with a digit or $") {
-    forAll(identifier, bundleField) {
-      case (id, field) =>
-        whenever(id.nonEmpty && field.nonEmpty) {
-          val input = s"""
-                         |circuit Test :
-                         |  module Test :
-                         |    input $id : { $field : UInt<32> }
-                         |""".stripMargin
-          firrtl.Parser.parse(input.split("\n"))
-        }
+    forAll(identifier, bundleField) { case (id, field) =>
+      whenever(id.nonEmpty && field.nonEmpty) {
+        val input = s"""
+                       |circuit Test :
+                       |  module Test :
+                       |    input $id : { $field : UInt<32> }
+                       |""".stripMargin
+        firrtl.Parser.parse(input.split("\n"))
+      }
     }
   }
 }

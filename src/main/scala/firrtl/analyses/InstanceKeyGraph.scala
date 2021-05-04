@@ -95,10 +95,9 @@ class InstanceKeyGraph private (c: ir.Circuit) {
     * in turn mapping instances names to corresponding module names
     */
   def getChildInstanceMap: mutable.LinkedHashMap[OfModule, mutable.LinkedHashMap[Instance, OfModule]] =
-    mutable.LinkedHashMap(childInstances.map {
-      case (k, v) =>
-        val moduleMap: mutable.LinkedHashMap[Instance, OfModule] = mutable.LinkedHashMap(v.map(_.toTokens): _*)
-        TargetToken.OfModule(k) -> moduleMap
+    mutable.LinkedHashMap(childInstances.map { case (k, v) =>
+      val moduleMap: mutable.LinkedHashMap[Instance, OfModule] = mutable.LinkedHashMap(v.map(_.toTokens): _*)
+      TargetToken.OfModule(k) -> moduleMap
     }: _*)
 
   /** All modules in the circuit reachable from the top module */

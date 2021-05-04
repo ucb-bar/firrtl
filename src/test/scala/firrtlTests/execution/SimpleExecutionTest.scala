@@ -13,15 +13,13 @@ case class Invalidate(expStr: String) extends SimpleTestCommand
 case class Poke(expStr: String, value: Int) extends SimpleTestCommand
 case class Expect(expStr: String, value: Int) extends SimpleTestCommand
 
-/**
-  * This trait defines an interface to run a self-contained test circuit.
+/** This trait defines an interface to run a self-contained test circuit.
   */
 trait TestExecution {
   def runEmittedDUT(c: Circuit, testDir: File): Unit
 }
 
-/**
-  * A class that makes it easier to write execution-driven tests.
+/** A class that makes it easier to write execution-driven tests.
   *
   * By combining a DUT body (supplied as a string without an enclosing
   * module or circuit) with a sequence of test operations, an
@@ -50,16 +48,14 @@ trait TestExecution {
 abstract class SimpleExecutionTest extends FirrtlPropSpec {
   this: TestExecution =>
 
-  /**
-    * Text representing the body of the DUT. This is useful for testing
+  /** Text representing the body of the DUT. This is useful for testing
     * statement-level language features, and cuts out the overhead of
     * writing a top-level DUT module and having peeks/pokes point at
     * IOs.
     */
   val body: String
 
-  /**
-    * A sequence of commands (peeks, pokes, invalidates, steps) that
+  /** A sequence of commands (peeks, pokes, invalidates, steps) that
     * represents how the testbench will progress. The semantics are
     * inspired by chisel-testers.
     */

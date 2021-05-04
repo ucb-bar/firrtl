@@ -57,8 +57,7 @@ abstract class AnnotationTests extends LowFirrtlTransformSpec with Matchers with
     val tname = transform.getName
     val inlineAnn = InlineAnnotation(CircuitName("Top"))
     val result = compiler.transform(CircuitState(parse(input), Seq(inlineAnn)))
-    result.annotations.last should matchPattern {
-      case DeletedAnnotation(`tname`, `inlineAnn`) =>
+    result.annotations.last should matchPattern { case DeletedAnnotation(`tname`, `inlineAnn`) =>
     }
     val exception = (intercept[Exception] {
       result.getEmittedCircuit

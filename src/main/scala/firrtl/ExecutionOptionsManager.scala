@@ -26,8 +26,7 @@ import firrtl.transforms.{DontCheckCombLoopsAnnotation, NoDCEAnnotation}
 
 import scala.collection.Seq
 
-/**
-  * Use this trait to define an options class that can add its private command line options to a externally
+/** Use this trait to define an options class that can add its private command line options to a externally
   * declared parser.
   * '''NOTE''' In all derived trait/classes, if you intend on maintaining backwards compatibility,
   *  be sure to add new options at the end of the current ones and don't remove any existing ones.
@@ -44,23 +43,20 @@ abstract class HasParser(applicationName: String) {
     }
   }
 
-  /**
-    * By default scopt calls sys.exit when --help is in options, this defeats that
+  /** By default scopt calls sys.exit when --help is in options, this defeats that
     */
   def doNotExitOnHelp(): Unit = {
     parser.terminateOnExit = false
   }
 
-  /**
-    * By default scopt calls sys.exit when --help is in options, this un-defeats doNotExitOnHelp
+  /** By default scopt calls sys.exit when --help is in options, this un-defeats doNotExitOnHelp
     */
   def exitOnHelp(): Unit = {
     parser.terminateOnExit = true
   }
 }
 
-/**
-  * Most of the chisel toolchain components require a topName which defines a circuit or a device under test.
+/** Most of the chisel toolchain components require a topName which defines a circuit or a device under test.
   * Much of the work that is done takes place in a directory.
   * It would be simplest to require topName to be defined but in practice it is preferred to defer this.
   * For example, in chisel, by deferring this it is possible for the execute there to first elaborate the
@@ -202,8 +198,7 @@ sealed abstract class OutputConfig
 final case class SingleFile(targetFile: String) extends OutputConfig
 final case class OneFilePerModule(targetDir: String) extends OutputConfig
 
-/**
-  * The options that firrtl supports in callable component sense
+/** The options that firrtl supports in callable component sense
   *
   * @param inputFileNameOverride  default is targetDir/topName.fir
   * @param outputFileNameOverride default is targetDir/topName.v  the .v is based on the compilerName parameter
@@ -324,8 +319,7 @@ case class FirrtlExecutionOptions(
     }
   }
 
-  /**
-    * build the annotation file name, taking overriding parameters
+  /** build the annotation file name, taking overriding parameters
     *
     * @param optionsManager this is needed to access build function and its common options
     * @return
@@ -605,8 +599,7 @@ object FirrtlExecutionSuccess {
   }
 }
 
-/**
-  * Indicates a successful execution of the firrtl compiler, returning the compiled result and
+/** Indicates a successful execution of the firrtl compiler, returning the compiled result and
   * the type of compile
   *
   * @param emitType The name of the compiler used, currently "high", "middle", "low", "verilog", "mverilog", or
@@ -620,16 +613,14 @@ class FirrtlExecutionSuccess(
   val circuitState: CircuitState)
     extends FirrtlExecutionResult
 
-/**
-  * The firrtl compilation failed.
+/** The firrtl compilation failed.
   *
   * @param message  Some kind of hint as to what went wrong.
   */
 @deprecated("Use FirrtlStage and examine the output AnnotationSeq directly", "FIRRTL 1.2")
 case class FirrtlExecutionFailure(message: String) extends FirrtlExecutionResult
 
-/**
-  * @param applicationName  The name shown in the usage
+/** @param applicationName  The name shown in the usage
   */
 @deprecated("Use new FirrtlStage infrastructure", "FIRRTL 1.2")
 class ExecutionOptionsManager(val applicationName: String) extends HasParser(applicationName) with HasCommonOptions {
@@ -640,8 +631,7 @@ class ExecutionOptionsManager(val applicationName: String) extends HasParser(app
 
   def showUsageAsError(): Unit = parser.showUsageAsError()
 
-  /**
-    * make sure that all levels of targetDirName exist
+  /** make sure that all levels of targetDirName exist
     *
     * @return true if directory exists
     */
@@ -651,8 +641,7 @@ class ExecutionOptionsManager(val applicationName: String) extends HasParser(app
 
   def targetDirName: String = commonOptions.targetDirName
 
-  /**
-    * this function sets the topName in the commonOptions.
+  /** this function sets the topName in the commonOptions.
     * It would be nicer to not need this but many chisel tools cannot determine
     * the name of the device under test until other options have been parsed.
     * Havin this function allows the code to set the TopName after it has been
@@ -673,8 +662,7 @@ class ExecutionOptionsManager(val applicationName: String) extends HasParser(app
     commonOptions = commonOptions.copy(targetDirName = newTargetDirName)
   }
 
-  /**
-    * return a file based on targetDir, topName and suffix
+  /** return a file based on targetDir, topName and suffix
     * Will not add the suffix if the topName already ends with that suffix
     *
     * @param suffix suffix to add, removes . if present

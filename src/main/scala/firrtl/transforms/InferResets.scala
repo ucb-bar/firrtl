@@ -154,13 +154,12 @@ class InferResets extends Transform with DependencyAPIMigration {
             // If sink is not ResetType, do nothing
             case _ => None
           }
-          con.foreach {
-            case (loc, exp) =>
-              val driver = exp.tpe match {
-                case ResetType => TargetDriver(makeTarget(exp))
-                case tpe       => TypeDriver(tpe, () => makeTarget(exp))
-              }
-              map.getOrElseUpdate(makeTarget(loc), mutable.ListBuffer()) += driver
+          con.foreach { case (loc, exp) =>
+            val driver = exp.tpe match {
+              case ResetType => TargetDriver(makeTarget(exp))
+              case tpe       => TypeDriver(tpe, () => makeTarget(exp))
+            }
+            map.getOrElseUpdate(makeTarget(loc), mutable.ListBuffer()) += driver
           }
         }
         stmt match {

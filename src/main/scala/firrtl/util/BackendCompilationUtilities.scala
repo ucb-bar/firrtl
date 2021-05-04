@@ -27,8 +27,7 @@ object BackendCompilationUtilities extends LazyLogging {
   def loggingProcessLogger: ProcessLogger =
     ProcessLogger(logger.info(_), logger.warn(_))
 
-  /**
-    * Copy the contents of a resource to a destination file.
+  /** Copy the contents of a resource to a destination file.
     * @param name the name of the resource
     * @param file the file to write it into
     */
@@ -62,8 +61,7 @@ object BackendCompilationUtilities extends LazyLogging {
     vf
   }
 
-  /**
-    * compule chirrtl to verilog by using a separate process
+  /** compule chirrtl to verilog by using a separate process
     *
     * @param prefix basename of the file
     * @param dir    directory where file lives
@@ -139,9 +137,9 @@ object BackendCompilationUtilities extends LazyLogging {
       blackBoxVerilogList ++
       vSourcesFiltered.flatMap(file => Seq("-v", file.getCanonicalPath)) ++
       Seq("--assert", "-Wno-fatal", "-Wno-WIDTH", "-Wno-STMTDLY") ++ {
-      if (suppressVcd) { Seq.empty }
-      else { Seq("--trace") }
-    } ++
+        if (suppressVcd) { Seq.empty }
+        else { Seq("--trace") }
+      } ++
       Seq(
         "-O1",
         "--top-module",

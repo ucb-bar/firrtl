@@ -135,8 +135,7 @@ class IRLookup private[analyses] (
     inCache(pathless, flow)
   }
 
-  /**
-    * @param t    [[firrtl.annotations.ReferenceTarget]] to be queried.
+  /** @param t    [[firrtl.annotations.ReferenceTarget]] to be queried.
     * @param flow flow of the target
     * @return expression of `t`
     */
@@ -181,8 +180,7 @@ class IRLookup private[analyses] (
     }
   }
 
-  /**
-    * @param t [[firrtl.annotations.ReferenceTarget]] to be queried.
+  /** @param t [[firrtl.annotations.ReferenceTarget]] to be queried.
     * @return the statement containing the declaration of the target
     */
   def declaration(t: ReferenceTarget): FirrtlNode = {

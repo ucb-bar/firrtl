@@ -11,8 +11,7 @@ import firrtl.testutils.FirrtlCheckers._
 import firrtl.stage.TransformManager
 import firrtl.options.Dependency
 
-/**
-  * Tests inline instances transformation
+/** Tests inline instances transformation
   */
 class InlineInstancesTests extends LowTransformSpec {
   def transform = new InlineInstances

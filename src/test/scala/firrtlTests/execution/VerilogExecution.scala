@@ -10,8 +10,7 @@ import firrtl.ir._
 import firrtl.stage.{FirrtlCircuitAnnotation, FirrtlStage}
 import firrtl.options.TargetDirAnnotation
 
-/**
-  * Mixing in this trait causes a SimpleExecutionTest to be run in Verilog simulation.
+/** Mixing in this trait causes a SimpleExecutionTest to be run in Verilog simulation.
   */
 trait VerilogExecution extends TestExecution {
   this: SimpleExecutionTest =>

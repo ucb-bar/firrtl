@@ -4,8 +4,7 @@ package firrtl.graph
 
 import scala.collection.mutable
 
-/**
-  * Implement a really simple graphviz dot renderer for a digraph
+/** Implement a really simple graphviz dot renderer for a digraph
   * There are three main renderers currently
   * -
   *
@@ -16,8 +15,7 @@ import scala.collection.mutable
   */
 class RenderDiGraph[T <: Any](diGraph: DiGraph[T], graphName: String = "", rankDir: String = "LR") {
 
-  /**
-    * override this to change the default way a node is displayed. Default is toString surrounded by double quotes
+  /** override this to change the default way a node is displayed. Default is toString surrounded by double quotes
     * This example changes the double quotes to brackets
     * {{{
     *   override def renderNode(node: String): String = { "[" + node + "]" }
@@ -27,8 +25,7 @@ class RenderDiGraph[T <: Any](diGraph: DiGraph[T], graphName: String = "", rankD
     s""""${node.toString}""""
   }
 
-  /**
-    * This finds a loop in a DiGraph if one exists and returns nodes
+  /** This finds a loop in a DiGraph if one exists and returns nodes
     * @note there is no way to currently to specify a particular loop
     * @return
     */
@@ -49,8 +46,7 @@ class RenderDiGraph[T <: Any](diGraph: DiGraph[T], graphName: String = "", rankD
     path.toSet
   }
 
-  /**
-    * Searches a DiGraph for a cycle. The first one found will be rendered as a graph that contains
+  /** Searches a DiGraph for a cycle. The first one found will be rendered as a graph that contains
     * only the nodes in the cycle plus the neighbors of those nodes.
     * @return a string that can be used as input to the dot command, string is empty if no loop
     */
@@ -69,20 +65,19 @@ class RenderDiGraph[T <: Any](diGraph: DiGraph[T], graphName: String = "", rankD
 
       // Create a new DiGraph containing only loop and direct children or parents
       val edgeData = diGraph.getEdgeMap
-      val newEdgeData = edgeData.flatMap {
-        case (node, children) =>
-          if (loop.contains(node)) {
-            Some(node -> children)
-          } else if (childrenFound.contains(node)) {
-            Some(node -> children.intersect(loop))
+      val newEdgeData = edgeData.flatMap { case (node, children) =>
+        if (loop.contains(node)) {
+          Some(node -> children)
+        } else if (childrenFound.contains(node)) {
+          Some(node -> children.intersect(loop))
+        } else {
+          val newChildren = children.intersect(loop)
+          if (newChildren.nonEmpty) {
+            Some(node -> newChildren)
           } else {
-            val newChildren = children.intersect(loop)
-            if (newChildren.nonEmpty) {
-              Some(node -> newChildren)
-            } else {
-              None
-            }
+            None
           }
+        }
       }
 
       val justLoop = DiGraph(newEdgeData)
@@ -97,8 +92,7 @@ class RenderDiGraph[T <: Any](diGraph: DiGraph[T], graphName: String = "", rankD
     }
   }
 
-  /**
-    * Convert this graph into input for the graphviz dot program
+  /** Convert this graph into input for the graphviz dot program
     * @return A string representation of the digraph in dot notation
     */
   def toDot: String = {
@@ -109,18 +103,16 @@ class RenderDiGraph[T <: Any](diGraph: DiGraph[T], graphName: String = "", rankD
 
     val edges = diGraph.getEdgeMap
 
-    edges.foreach {
-      case (parent, children) =>
-        children.foreach { child =>
-          s.append(s"""  ${renderNode(parent)} -> ${renderNode(child)};""" + "\n")
-        }
+    edges.foreach { case (parent, children) =>
+      children.foreach { child =>
+        s.append(s"""  ${renderNode(parent)} -> ${renderNode(child)};""" + "\n")
+      }
     }
     s.append("}\n")
     s.toString
   }
 
-  /**
-    * Convert this graph into input for the graphviz dot program, but with  a
+  /** Convert this graph into input for the graphviz dot program, but with  a
     * loop,if present, highlighted in red.
     * @return string that is a graphviz digraph, but with loops highlighted
     */
@@ -133,19 +125,18 @@ class RenderDiGraph[T <: Any](diGraph: DiGraph[T], graphName: String = "", rankD
 
     val edges = diGraph.getEdgeMap
 
-    edges.foreach {
-      case (parent, children) =>
-        allNodes += parent
-        allNodes ++= children
+    edges.foreach { case (parent, children) =>
+      allNodes += parent
+      allNodes ++= children
 
-        children.foreach { child =>
-          val highlight = if (loopedNodes.contains(parent) && loopedNodes.contains(child)) {
-            "[color=red,penwidth=3.0]"
-          } else {
-            ""
-          }
-          s.append(s"""  ${renderNode(parent)} -> ${renderNode(child)}$highlight;""" + "\n")
+      children.foreach { child =>
+        val highlight = if (loopedNodes.contains(parent) && loopedNodes.contains(child)) {
+          "[color=red,penwidth=3.0]"
+        } else {
+          ""
         }
+        s.append(s"""  ${renderNode(parent)} -> ${renderNode(child)}$highlight;""" + "\n")
+      }
     }
 
     val paredRankedNodes = rankedNodes.flatMap { nodes =>
@@ -162,8 +153,7 @@ class RenderDiGraph[T <: Any](diGraph: DiGraph[T], graphName: String = "", rankD
     s.toString
   }
 
-  /**
-    * Creates a series of Seq of nodes for each minimum depth that those
+  /** Creates a series of Seq of nodes for each minimum depth that those
     * are from the sources of this graph.
     * @return
     */
@@ -189,8 +179,7 @@ class RenderDiGraph[T <: Any](diGraph: DiGraph[T], graphName: String = "", rankD
     rankNodes
   }
 
-  /**
-    * Convert this graph into input for the graphviz dot program.
+  /** Convert this graph into input for the graphviz dot program.
     * It tries to align nodes in columns based
     * on their minimum distance to a source.
     * Can also be faster and better behaved on large graphs

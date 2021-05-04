@@ -59,18 +59,17 @@ object JsonProtocol {
   class TransformSerializer
       extends CustomSerializer[Transform](format =>
         (
-          {
-            case JString(s) =>
-              try {
-                Class.forName(s).asInstanceOf[Class[_ <: Transform]].newInstance()
-              } catch {
-                case e: java.lang.InstantiationException =>
-                  throw new FirrtlInternalException(
-                    "NoSuchMethodException during construction of serialized Transform. Is your Transform an inner class?",
-                    e
-                  )
-                case t: Throwable => throw t
-              }
+          { case JString(s) =>
+            try {
+              Class.forName(s).asInstanceOf[Class[_ <: Transform]].newInstance()
+            } catch {
+              case e: java.lang.InstantiationException =>
+                throw new FirrtlInternalException(
+                  "NoSuchMethodException during construction of serialized Transform. Is your Transform an inner class?",
+                  e
+                )
+              case t: Throwable => throw t
+            }
           },
           { case x: Transform => JString(x.getClass.getName) }
         )
@@ -236,10 +235,9 @@ object JsonProtocol {
       .distinct
 
     implicit val formats = jsonFormat(tags)
-    Try(writePretty(annos)).recoverWith {
-      case e: org.json4s.MappingException =>
-        val badAnnos = findUnserializeableAnnos(annos)
-        Failure(if (badAnnos.isEmpty) e else UnserializableAnnotationException(badAnnos))
+    Try(writePretty(annos)).recoverWith { case e: org.json4s.MappingException =>
+      val badAnnos = findUnserializeableAnnos(annos)
+      Failure(if (badAnnos.isEmpty) e else UnserializableAnnotationException(badAnnos))
     }
   }
 

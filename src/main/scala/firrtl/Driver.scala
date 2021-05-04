@@ -13,8 +13,7 @@ import firrtl.stage.phases.DriverCompatibility
 import firrtl.options.{Dependency, Phase, PhaseManager, StageUtils, Viewer}
 import firrtl.options.phases.DeletedWrapper
 
-/**
-  * The driver provides methods to access the firrtl compiler.
+/** The driver provides methods to access the firrtl compiler.
   * Invoke the compiler with either a FirrtlExecutionOption
   *
   * @example
@@ -44,8 +43,7 @@ object Driver {
   @deprecated("Use firrtl.options.StageUtils.dramaticWarning", "FIRRTL 1.2")
   def dramaticWarning(message: String): Unit = StageUtils.dramaticWarning(message)
 
-  /**
-    * print the message in red
+  /** print the message in red
     *
     * @param message error message
     */
@@ -181,8 +179,7 @@ object Driver {
     }
   }
 
-  /**
-    * Run the firrtl compiler using the provided option
+  /** Run the firrtl compiler using the provided option
     *
     * @param optionsManager the desired flags to the compiler
     * @return a FirrtlExecutionResult indicating success or failure, provide access to emitted data on success
@@ -217,8 +214,7 @@ object Driver {
     Viewer[FirrtlExecutionResult].view(annosx)
   }
 
-  /**
-    * this is a wrapper for execute that builds the options from a standard command line args,
+  /** this is a wrapper for execute that builds the options from a standard command line args,
     * for example, like strings passed to main()
     *
     * @param args  an Array of string s containing legal arguments

@@ -15,8 +15,7 @@ case class FlattenAnnotation(target: Named) extends SingleTargetAnnotation[Named
   def duplicate(n: Named) = FlattenAnnotation(n)
 }
 
-/**
-  * Takes flatten annotations for module instances and modules and inline the entire hierarchy of
+/** Takes flatten annotations for module instances and modules and inline the entire hierarchy of
   * modules down from the annotations. This transformation instantiates and is based on the
   * InlineInstances transformation.
   *
@@ -33,24 +32,22 @@ class Flatten extends Transform with DependencyAPIMigration {
   val inlineTransform = new InlineInstances
 
   private def collectAnns(circuit: Circuit, anns: Iterable[Annotation]): (Set[ModuleName], Set[ComponentName]) =
-    anns.foldLeft((Set.empty[ModuleName], Set.empty[ComponentName])) {
-      case ((modNames, instNames), ann) =>
-        ann match {
-          case FlattenAnnotation(CircuitName(c)) =>
-            (
-              circuit.modules.collect {
-                case Module(_, name, _, _) if name != circuit.main => ModuleName(name, CircuitName(c))
-              }.toSet,
-              instNames
-            )
-          case FlattenAnnotation(ModuleName(mod, cir))    => (modNames + ModuleName(mod, cir), instNames)
-          case FlattenAnnotation(ComponentName(com, mod)) => (modNames, instNames + ComponentName(com, mod))
-          case _                                          => throw new PassException("Annotation must be a FlattenAnnotation")
-        }
+    anns.foldLeft((Set.empty[ModuleName], Set.empty[ComponentName])) { case ((modNames, instNames), ann) =>
+      ann match {
+        case FlattenAnnotation(CircuitName(c)) =>
+          (
+            circuit.modules.collect {
+              case Module(_, name, _, _) if name != circuit.main => ModuleName(name, CircuitName(c))
+            }.toSet,
+            instNames
+          )
+        case FlattenAnnotation(ModuleName(mod, cir))    => (modNames + ModuleName(mod, cir), instNames)
+        case FlattenAnnotation(ComponentName(com, mod)) => (modNames, instNames + ComponentName(com, mod))
+        case _                                          => throw new PassException("Annotation must be a FlattenAnnotation")
+      }
     }
 
-  /**
-    *  Modifies the circuit by replicating the hierarchy under the annotated objects (mods and insts) and
+  /**  Modifies the circuit by replicating the hierarchy under the annotated objects (mods and insts) and
     *  by rewriting the original circuit to refer to the new modules that will be inlined later.
     *  @return modified circuit and ModuleNames to inline
     */
@@ -64,8 +61,7 @@ class Flatten extends Transform with DependencyAPIMigration {
     val newModDefs = mutable.Set.empty[DefModule]
     val nsp = Namespace(c)
 
-    /**
-      *  We start with rewriting DefInstances in the modules with annotations to refer to replicated modules to be created later.
+    /**  We start with rewriting DefInstances in the modules with annotations to refer to replicated modules to be created later.
       *  It populates seedMods where we capture the mapping between the original module name of the instances came from annotation
       *  to a new module name that we will create as a replica of the original one.
       *  Note: We replace old modules with it replicas so that other instances of the same module can be left unchanged.
@@ -87,8 +83,7 @@ class Flatten extends Transform with DependencyAPIMigration {
 
     val modifMods = c.modules.map { m => m.map(rewriteMod(m)) }
 
-    /**
-      *  Recursively rewrites modules in the hierarchy starting with modules in seedMods (originally annotations).
+    /**  Recursively rewrites modules in the hierarchy starting with modules in seedMods (originally annotations).
       *  Populates newModDefs, which are replicated modules used in the subcircuit that we create
       *  by recursively traversing modules captured inside seedMods and replicating them
       */

@@ -98,13 +98,12 @@ class InferWidths extends Transform with ResolvedAnnotationPaths with Dependency
       constraintSolver.addGeq(w1, w2, r1.prettyPrint(""), r2.prettyPrint(""))
       constraintSolver.addGeq(w2, w1, r1.prettyPrint(""), r2.prettyPrint(""))
     case (t1: BundleType, t2: BundleType) =>
-      (t1.fields.zip(t2.fields)).foreach {
-        case (f1, f2) =>
-          (f1.flip, f2.flip) match {
-            case (Default, Default) => addTypeConstraints(r1.field(f1.name), r2.field(f2.name))(f1.tpe, f2.tpe)
-            case (Flip, Flip)       => addTypeConstraints(r2.field(f2.name), r1.field(f1.name))(f2.tpe, f1.tpe)
-            case _                  => sys.error("Shouldn't be here")
-          }
+      (t1.fields.zip(t2.fields)).foreach { case (f1, f2) =>
+        (f1.flip, f2.flip) match {
+          case (Default, Default) => addTypeConstraints(r1.field(f1.name), r2.field(f2.name))(f1.tpe, f2.tpe)
+          case (Flip, Flip)       => addTypeConstraints(r2.field(f2.name), r1.field(f1.name))(f2.tpe, f1.tpe)
+          case _                  => sys.error("Shouldn't be here")
+        }
       }
     case (t1: VectorType, t2: VectorType) => addTypeConstraints(r1.index(0), r2.index(0))(t1.tpe, t2.tpe)
     case (AsyncResetType, AsyncResetType) => Nil
@@ -131,26 +130,24 @@ class InferWidths extends Transform with ResolvedAnnotationPaths with Dependency
       val n = get_size(c.loc.tpe)
       val locs = create_exps(c.loc)
       val exps = create_exps(c.expr)
-      (locs.zip(exps)).foreach {
-        case (loc, exp) =>
-          to_flip(flow(loc)) match {
-            case Default => addTypeConstraints(Target.asTarget(mt)(loc), Target.asTarget(mt)(exp))(loc.tpe, exp.tpe)
-            case Flip    => addTypeConstraints(Target.asTarget(mt)(exp), Target.asTarget(mt)(loc))(exp.tpe, loc.tpe)
-          }
+      (locs.zip(exps)).foreach { case (loc, exp) =>
+        to_flip(flow(loc)) match {
+          case Default => addTypeConstraints(Target.asTarget(mt)(loc), Target.asTarget(mt)(exp))(loc.tpe, exp.tpe)
+          case Flip    => addTypeConstraints(Target.asTarget(mt)(exp), Target.asTarget(mt)(loc))(exp.tpe, loc.tpe)
+        }
       }
       c
     case pc: PartialConnect =>
       val ls = get_valid_points(pc.loc.tpe, pc.expr.tpe, Default, Default)
       val locs = create_exps(pc.loc)
       val exps = create_exps(pc.expr)
-      ls.foreach {
-        case (x, y) =>
-          val loc = locs(x)
-          val exp = exps(y)
-          to_flip(flow(loc)) match {
-            case Default => addTypeConstraints(Target.asTarget(mt)(loc), Target.asTarget(mt)(exp))(loc.tpe, exp.tpe)
-            case Flip    => addTypeConstraints(Target.asTarget(mt)(exp), Target.asTarget(mt)(loc))(exp.tpe, loc.tpe)
-          }
+      ls.foreach { case (x, y) =>
+        val loc = locs(x)
+        val exp = exps(y)
+        to_flip(flow(loc)) match {
+          case Default => addTypeConstraints(Target.asTarget(mt)(loc), Target.asTarget(mt)(exp))(loc.tpe, exp.tpe)
+          case Flip    => addTypeConstraints(Target.asTarget(mt)(exp), Target.asTarget(mt)(loc))(exp.tpe, loc.tpe)
+        }
       }
       pc
     case r: DefRegister =>
@@ -162,14 +159,13 @@ class InferWidths extends Transform with ResolvedAnnotationPaths with Dependency
     case a @ Attach(_, exprs) =>
       val widths = exprs.map(e => (e, getWidth(e.tpe)))
       val maxWidth = IsMax(widths.map(x => width2constraint(x._2)))
-      widths.foreach {
-        case (e, w) =>
-          constraintSolver.addGeq(
-            w,
-            CalcWidth(maxWidth),
-            Target.asTarget(mt)(e).prettyPrint(""),
-            mt.ref(a.serialize).prettyPrint("")
-          )
+      widths.foreach { case (e, w) =>
+        constraintSolver.addGeq(
+          w,
+          CalcWidth(maxWidth),
+          Target.asTarget(mt)(e).prettyPrint(""),
+          mt.ref(a.serialize).prettyPrint("")
+        )
       }
       a
     case c: Conditionally =>
@@ -231,9 +227,8 @@ class InferWidths extends Transform with ResolvedAnnotationPaths with Dependency
         case m: DefMemory    => Some(m.name -> MemPortUtils.memType(m))
         case other => None
       }
-      pairOpt.foreach {
-        case (ref, tpe) =>
-          typeMap += (ReferenceTarget(circuitName, modName, Nil, ref, Nil) -> tpe)
+      pairOpt.foreach { case (ref, tpe) =>
+        typeMap += (ReferenceTarget(circuitName, modName, Nil, ref, Nil) -> tpe)
       }
       stmt.foreachStmt(getDeclTypes(modName))
     }

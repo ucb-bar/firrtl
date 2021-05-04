@@ -48,15 +48,14 @@ object RenameTop extends Transform {
     val ns = Namespace(c)
 
     val newTopName = state.annotations
-      .collectFirst({
-        case RenameTopAnnotation(name) =>
-          require(ns.tryName(name))
-          name
+      .collectFirst({ case RenameTopAnnotation(name) =>
+        require(ns.tryName(name))
+        name
       })
       .getOrElse(c.main)
 
-    state.annotations.collect {
-      case ModuleNamespaceAnnotation(mustNotCollideNS) => require(mustNotCollideNS.tryName(newTopName))
+    state.annotations.collect { case ModuleNamespaceAnnotation(mustNotCollideNS) =>
+      require(mustNotCollideNS.tryName(newTopName))
     }
 
     val modulesx = c.modules.map {
@@ -323,8 +322,8 @@ object FirrtlCheckers extends FirrtlMatchers {
               case i: Iterable[Any] => i.iterator
               case _ => Iterator.empty
             }
-            iter.foldLeft(false) {
-              case (res, elt) => if (res) res else rec(elt)
+            iter.foldLeft(false) { case (res, elt) =>
+              if (res) res else rec(elt)
             }
         }
       }
@@ -386,18 +385,18 @@ class TestFirrtlFlatSpec extends FirrtlFlatSpec {
   behavior.of("Search")
 
   it should "be supported on Circuit" in {
-    assert(c.search {
-      case Connect(_, Reference("out", _, _, _), Reference("in", _, _, _)) => true
+    assert(c.search { case Connect(_, Reference("out", _, _, _), Reference("in", _, _, _)) =>
+      true
     })
   }
   it should "be supported on CircuitStates" in {
-    assert(state.search {
-      case Connect(_, Reference("out", _, _, _), Reference("in", _, _, _)) => true
+    assert(state.search { case Connect(_, Reference("out", _, _, _), Reference("in", _, _, _)) =>
+      true
     })
   }
   it should "be supported on the results of compilers" in {
-    assert(compiled.search {
-      case Connect(_, WRef("out", _, _, _), WRef("in", _, _, _)) => true
+    assert(compiled.search { case Connect(_, WRef("out", _, _, _), WRef("in", _, _, _)) =>
+      true
     })
   }
 
@@ -541,6 +540,6 @@ abstract class EquivalenceTest(transforms: Seq[Transform], name: String, dir: St
 
   s"$name with ${transforms.map(_.name).mkString(", ")}" should
     s"be equivalent to $name without ${transforms.map(_.name).mkString(", ")}" in {
-    firrtlEquivalenceTest(input, transforms)
-  }
+      firrtlEquivalenceTest(input, transforms)
+    }
 }

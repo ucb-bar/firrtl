@@ -87,8 +87,7 @@ class BlackBoxSourceHelper extends Transform with DependencyAPIMigration {
         }
     }
 
-  /**
-    * write the verilog source for each annotation to the target directory
+  /** write the verilog source for each annotation to the target directory
     * @note the state is not changed by this transform
     * @param state Input Firrtl AST
     * @return A transformed Firrtl AST
@@ -112,14 +111,12 @@ class BlackBoxSourceHelper extends Transform with DependencyAPIMigration {
         toFile
     }
 
-    val inlineFiles: ListSet[File] = annos.collect {
-      case BlackBoxInlineAnno(_, name, text) =>
-        val outFile = new File(targetDir, name)
-        (text, outFile)
-    }.map {
-      case (text, file) =>
-        writeTextToFile(text, file)
-        file
+    val inlineFiles: ListSet[File] = annos.collect { case BlackBoxInlineAnno(_, name, text) =>
+      val outFile = new File(targetDir, name)
+      (text, outFile)
+    }.map { case (text, file) =>
+      writeTextToFile(text, file)
+      file
     }
 
     // Issue #917 - We don't want to list Verilog header files ("*.vh") in our file list - they will automatically be included by reference.
@@ -154,8 +151,7 @@ object BlackBoxSourceHelper {
       throw new BlackBoxNotFoundException(fileName, e.getMessage)
   }
 
-  /**
-    * finds the named resource and writes into the directory
+  /** finds the named resource and writes into the directory
     * @param name the name of the resource
     * @param dir the directory in which to write the file
     * @return the closed File object
@@ -167,8 +163,7 @@ object BlackBoxSourceHelper {
     outFile
   }
 
-  /**
-    * finds the named resource and writes into the directory
+  /** finds the named resource and writes into the directory
     * @param name the name of the resource
     * @param file the file to write it into
     * @throws BlackBoxNotFoundException if the requested resource does not exist

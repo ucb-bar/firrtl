@@ -31,8 +31,8 @@ class RenameModules extends Transform with DependencyAPIMigration {
   }
 
   def execute(state: CircuitState): CircuitState = {
-    val namespace = state.annotations.collectFirst {
-      case m: ModuleNamespaceAnnotation => m
+    val namespace = state.annotations.collectFirst { case m: ModuleNamespaceAnnotation =>
+      m
     }.map(_.namespace)
 
     if (namespace.isEmpty) {

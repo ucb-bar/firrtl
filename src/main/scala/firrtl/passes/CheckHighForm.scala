@@ -117,8 +117,8 @@ trait CheckHighFormLike { this: Pass =>
       case a: AggregateType => a.mapType(stripWidth)
     }
 
-    val extmoduleCollidingPorts = c.modules.collect {
-      case a: ExtModule => a
+    val extmoduleCollidingPorts = c.modules.collect { case a: ExtModule =>
+      a
     }.groupBy(a => (a.defname, a.params.nonEmpty))
       .map {
         /* There are no parameters, so all ports must match exactly. */
@@ -132,19 +132,18 @@ trait CheckHighFormLike { this: Pass =>
       }
       .filter(_._2.size > 1)
 
-    c.modules.collect {
-      case a: ExtModule =>
-        a match {
-          case ExtModule(info, name, _, defname, _) if (intModuleNames.contains(defname)) =>
-            errors.append(new DefnameConflictException(info, name, defname))
-          case _ =>
-        }
-        a match {
-          case ExtModule(info, name, _, defname, params)
-              if extmoduleCollidingPorts.contains((defname, params.nonEmpty)) =>
-            errors.append(new DefnameDifferentPortsException(info, name, defname))
-          case _ =>
-        }
+    c.modules.collect { case a: ExtModule =>
+      a match {
+        case ExtModule(info, name, _, defname, _) if (intModuleNames.contains(defname)) =>
+          errors.append(new DefnameConflictException(info, name, defname))
+        case _ =>
+      }
+      a match {
+        case ExtModule(info, name, _, defname, params)
+            if extmoduleCollidingPorts.contains((defname, params.nonEmpty)) =>
+          errors.append(new DefnameDifferentPortsException(info, name, defname))
+        case _ =>
+      }
     }
 
     def checkHighFormPrimop(info: Info, mname: String, e: DoPrim): Unit = {

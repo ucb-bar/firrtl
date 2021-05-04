@@ -90,12 +90,11 @@ object DriverCompatibility {
     annotations.collectFirst { case TopNameAnnotation(n) => n }
       .orElse(annotations.collectFirst { case FirrtlCircuitAnnotation(c) => c.main }.orElse(annotations.collectFirst {
         case FirrtlSourceAnnotation(s) => Parser.parse(s).main
-      }.orElse(annotations.collectFirst {
-        case FirrtlFileAnnotation(f) =>
-          FirrtlStageUtils.getFileExtension(f) match {
-            case ProtoBufFile => FromProto.fromFile(f).main
-            case FirrtlFile   => Parser.parse(FileUtils.getText(f)).main
-          }
+      }.orElse(annotations.collectFirst { case FirrtlFileAnnotation(f) =>
+        FirrtlStageUtils.getFileExtension(f) match {
+          case ProtoBufFile => FromProto.fromFile(f).main
+          case FirrtlFile   => Parser.parse(FileUtils.getText(f)).main
+        }
       })))
 
   /** Determine the target directory with the following precedence (highest to lowest):

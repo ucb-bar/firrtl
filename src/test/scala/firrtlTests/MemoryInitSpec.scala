@@ -69,19 +69,18 @@ class MemInitSpec extends FirrtlFlatSpec {
   Seq(1, 3, 30, 400, 12345).foreach { value =>
     s"MemoryScalarInitAnnotation w/ $value" should
       s"create an initialization with all values set to $value" in {
-      val annos = Seq(MemoryScalarInitAnnotation(mRef, value))
-      val result = compile(annos)
-      result should containLine(s"    m[initvar] = $value;")
-    }
+        val annos = Seq(MemoryScalarInitAnnotation(mRef, value))
+        val result = compile(annos)
+        result should containLine(s"    m[initvar] = $value;")
+      }
   }
 
   "MemoryArrayInitAnnotation" should "initialize all addresses" in {
     val values = Seq.tabulate(32)(ii => 2 * ii + 5).map(BigInt(_))
     val annos = Seq(MemoryArrayInitAnnotation(mRef, values))
     val result = compile(annos)
-    values.zipWithIndex.foreach {
-      case (value, addr) =>
-        result should containLine(s"  m[$addr] = $value;")
+    values.zipWithIndex.foreach { case (value, addr) =>
+      result should containLine(s"  m[$addr] = $value;")
     }
   }
 
@@ -241,11 +240,10 @@ abstract class MemInitExecutionSpec(values: Seq[Int], init: ReferenceTarget => A
   val mRef = CircuitTarget("dut").module("dut").ref("m")
   override val customAnnotations: AnnotationSeq = Seq(init(mRef))
 
-  override def commands: Seq[SimpleTestCommand] = (Seq(-1) ++ values).zipWithIndex.map {
-    case (value, addr) =>
-      if (value == -1) { Seq(Poke("m.r.addr", addr)) }
-      else if (addr >= values.length) { Seq(Expect("m.r.data", value)) }
-      else { Seq(Poke("m.r.addr", addr), Expect("m.r.data", value)) }
+  override def commands: Seq[SimpleTestCommand] = (Seq(-1) ++ values).zipWithIndex.map { case (value, addr) =>
+    if (value == -1) { Seq(Poke("m.r.addr", addr)) }
+    else if (addr >= values.length) { Seq(Expect("m.r.data", value)) }
+    else { Seq(Poke("m.r.addr", addr), Expect("m.r.data", value)) }
   }.flatMap(_ ++ Seq(Step(1)))
 }
 

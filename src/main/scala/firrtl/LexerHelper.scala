@@ -123,8 +123,7 @@ abstract class LexerHelper {
       }
     }
 
-  /**
-    * Returns a DEDENT token, and also queues up additional DEDENTs as necessary.
+  /** Returns a DEDENT token, and also queues up additional DEDENTs as necessary.
     *
     * @param targetIndent the "size" of the indentation (number of spaces) by the end
     * @param copyFrom     the triggering token

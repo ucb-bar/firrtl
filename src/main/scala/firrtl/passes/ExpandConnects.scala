@@ -39,13 +39,12 @@ object ExpandConnects extends Pass {
           case sx: DefMemory    => flows(sx.name) = SourceFlow; sx
           case sx: DefNode => flows(sx.name) = SourceFlow; sx
           case sx: IsInvalid =>
-            val invalids = create_exps(sx.expr).flatMap {
-              case expx =>
-                flow(set_flow(expx)) match {
-                  case DuplexFlow => Some(IsInvalid(sx.info, expx))
-                  case SinkFlow   => Some(IsInvalid(sx.info, expx))
-                  case _          => None
-                }
+            val invalids = create_exps(sx.expr).flatMap { case expx =>
+              flow(set_flow(expx)) match {
+                case DuplexFlow => Some(IsInvalid(sx.info, expx))
+                case SinkFlow   => Some(IsInvalid(sx.info, expx))
+                case _          => None
+              }
             }
             invalids.size match {
               case 0 => EmptyStmt
@@ -55,27 +54,25 @@ object ExpandConnects extends Pass {
           case sx: Connect =>
             val locs = create_exps(sx.loc)
             val exps = create_exps(sx.expr)
-            Block(locs.zip(exps).map {
-              case (locx, expx) =>
-                to_flip(flow(locx)) match {
-                  case Default => Connect(sx.info, locx, expx)
-                  case Flip    => Connect(sx.info, expx, locx)
-                }
+            Block(locs.zip(exps).map { case (locx, expx) =>
+              to_flip(flow(locx)) match {
+                case Default => Connect(sx.info, locx, expx)
+                case Flip    => Connect(sx.info, expx, locx)
+              }
             })
           case sx: PartialConnect =>
             val ls = get_valid_points(sx.loc.tpe, sx.expr.tpe, Default, Default)
             val locs = create_exps(sx.loc)
             val exps = create_exps(sx.expr)
-            val stmts = ls.map {
-              case (x, y) =>
-                locs(x).tpe match {
-                  case AnalogType(_) => Attach(sx.info, Seq(locs(x), exps(y)))
-                  case _ =>
-                    to_flip(flow(locs(x))) match {
-                      case Default => Connect(sx.info, locs(x), exps(y))
-                      case Flip    => Connect(sx.info, exps(y), locs(x))
-                    }
-                }
+            val stmts = ls.map { case (x, y) =>
+              locs(x).tpe match {
+                case AnalogType(_) => Attach(sx.info, Seq(locs(x), exps(y)))
+                case _ =>
+                  to_flip(flow(locs(x))) match {
+                    case Default => Connect(sx.info, locs(x), exps(y))
+                    case Flip    => Connect(sx.info, exps(y), locs(x))
+                  }
+              }
             }
             Block(stmts)
           case sx => sx.map(expand_s)

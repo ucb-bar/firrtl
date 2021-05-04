@@ -183,8 +183,8 @@ class ConstantPropagation extends Transform with RegisteredTransform with Depend
       val maskedValue = Utils.maskBigInt(a.value, w.toInt)
       val v: Seq[Boolean] = s"%${w}s".format(maskedValue.toString(2)).map(_ == '1')
 
-      (BigInt(0) until w).zip(v).foldLeft(identityValue) {
-        case (acc, (_, x)) => reduce(acc, x)
+      (BigInt(0) until w).zip(v).foldLeft(identityValue) { case (acc, (_, x)) =>
+        reduce(acc, x)
       } match {
         case false => zero
         case true  => one
@@ -788,9 +788,8 @@ class ConstantPropagation extends Transform with RegisteredTransform with Depend
 
   // Unify two maps using f to combine values of duplicate keys
   private def unify[K, V](a: Map[K, V], b: Map[K, V])(f: (V, V) => V): Map[K, V] =
-    b.foldLeft(a) {
-      case (acc, (k, v)) =>
-        acc + (k -> acc.get(k).map(f(_, v)).getOrElse(v))
+    b.foldLeft(a) { case (acc, (k, v)) =>
+      acc + (k -> acc.get(k).map(f(_, v)).getOrElse(v))
     }
 
   private def run(c: Circuit, dontTouchMap: Map[OfModule, Set[String]], disabledOps: Set[PrimOp]): Circuit = {
@@ -840,17 +839,15 @@ class ConstantPropagation extends Transform with RegisteredTransform with Depend
               (mmap + (mname -> mx), constOutputs + (mname -> mco), constInputsx)
           }
         // Determine which module inputs have all of the same, new constants driving them
-        val newProppedInputs = constInputsx.flatMap {
-          case (mname, ports) =>
-            val portsx = ports.flatMap {
-              case (pname, lits) =>
-                val newPort = !constInputs.get(mname).map(_.contains(pname)).getOrElse(false)
-                val isModule = modules.contains(mname) // ExtModules are not contained in modules
-                val allSameConst = lits.size == instCount(mname) && lits.toSet.size == 1
-                if (isModule && newPort && allSameConst) Some(pname -> lits.head)
-                else None
-            }
-            if (portsx.nonEmpty) Some(mname -> portsx) else None
+        val newProppedInputs = constInputsx.flatMap { case (mname, ports) =>
+          val portsx = ports.flatMap { case (pname, lits) =>
+            val newPort = !constInputs.get(mname).map(_.contains(pname)).getOrElse(false)
+            val isModule = modules.contains(mname) // ExtModules are not contained in modules
+            val allSameConst = lits.size == instCount(mname) && lits.toSet.size == 1
+            if (isModule && newPort && allSameConst) Some(pname -> lits.head)
+            else None
+          }
+          if (portsx.nonEmpty) Some(mname -> portsx) else None
         }
         val modsWithConstInputs = newProppedInputs.keySet
         val newToVisit = modsWithConstInputs ++

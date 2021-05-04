@@ -22,8 +22,7 @@ import logger.LazyLogging
 package object stage {
   implicit object FirrtlOptionsView extends OptionsView[FirrtlOptions] with LazyLogging {
 
-    /**
-      * @todo custom transforms are appended as discovered, can this be prepended safely?
+    /** @todo custom transforms are appended as discovered, can this be prepended safely?
       */
     def view(options: AnnotationSeq): FirrtlOptions = options.collect { case a: FirrtlOption => a }
       .foldLeft(new FirrtlOptions()) { (c, x) =>

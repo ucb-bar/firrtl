@@ -12,8 +12,7 @@ import firrtl.stage.Forms
 
 import scala.collection.mutable
 
-/**
-  * Specifies a group of components, within a module, to pull out into their own module
+/** Specifies a group of components, within a module, to pull out into their own module
   * Components that are only connected to a group's components will also be included
   *
   * @param components components in this group
@@ -34,23 +33,21 @@ case class GroupAnnotation(
     require(components.forall(!_.name.contains('.')), "No components can be a subcomponent.")
   }
 
-  /**
-    * The module that all components are located in
+  /** The module that all components are located in
     * @return
     */
   def currentModule: String = components.head.module.name
 
   /* Only keeps components renamed to components */
   def update(renames: RenameMap): Seq[Annotation] = {
-    val newComponents = components.flatMap { c => renames.get(c).getOrElse(Seq(c)) }.collect {
-      case c: ComponentName => c
+    val newComponents = components.flatMap { c => renames.get(c).getOrElse(Seq(c)) }.collect { case c: ComponentName =>
+      c
     }
     Seq(GroupAnnotation(newComponents, newModule, newInstance, outputSuffix, inputSuffix))
   }
 }
 
-/**
-  * Splits a module into multiple modules by grouping its components via [[GroupAnnotation]]'s
+/** Splits a module into multiple modules by grouping its components via [[GroupAnnotation]]'s
   */
 class GroupComponents extends Transform with DependencyAPIMigration {
   type MSet[T] = mutable.Set[T]
@@ -96,8 +93,8 @@ class GroupComponents extends Transform with DependencyAPIMigration {
     // Group roots, by label
     // The label "" indicates the original module, and components belonging to that group will remain
     //   in the original module (not get moved into a new module)
-    val label2group: Map[String, MSet[String]] = groups.collect {
-      case GroupAnnotation(set, module, instance, _, _) => set.head.name -> mutable.Set(set.map(_.name): _*)
+    val label2group: Map[String, MSet[String]] = groups.collect { case GroupAnnotation(set, module, instance, _, _) =>
+      set.head.name -> mutable.Set(set.map(_.name): _*)
     }.toMap + ("" -> mutable.Set(""))
 
     // Name of new module containing each group, by label
@@ -119,14 +116,13 @@ class GroupComponents extends Transform with DependencyAPIMigration {
 
     // For each group (by label), add connectivity between nodes in set
     // Populate reachableNodes with reachability, where blacklist is their notSet
-    label2group.foreach {
-      case (label, set) =>
-        set.foreach { x =>
-          deps.addPairWithEdge(label, x)
-        }
-        deps.reachableFrom(label, notSet(label)).foreach { node =>
-          reachableNodes.getOrElseUpdate(node, mutable.Set.empty[String]) += label
-        }
+    label2group.foreach { case (label, set) =>
+      set.foreach { x =>
+        deps.addPairWithEdge(label, x)
+      }
+      deps.reachableFrom(label, notSet(label)).foreach { node =>
+        reachableNodes.getOrElseUpdate(node, mutable.Set.empty[String]) += label
+      }
     }
 
     // Unused nodes are not reachable from any group nor the root--add them to root group
@@ -135,20 +131,18 @@ class GroupComponents extends Transform with DependencyAPIMigration {
     }
 
     // Add nodes who are reached by a single group, to that group
-    reachableNodes.foreach {
-      case (node, membership) =>
-        if (membership.size == 1) {
-          label2group(membership.head) += node
-        } else {
-          label2group("") += node
-        }
+    reachableNodes.foreach { case (node, membership) =>
+      if (membership.size == 1) {
+        label2group(membership.head) += node
+      } else {
+        label2group("") += node
+      }
     }
 
     applyGrouping(m, labelOrder, label2group, label2module, label2instance, label2annotation)
   }
 
-  /**
-    * Applies datastructures to a module, to group its components into distinct modules
+  /** Applies datastructures to a module, to group its components into distinct modules
     * @param m module to split apart
     * @param labelOrder order of groups in SeqAnnotation, to make the grouping more deterministic
     * @param label2group group components, by label
@@ -167,11 +161,10 @@ class GroupComponents extends Transform with DependencyAPIMigration {
   ): Seq[Module] = {
     // Maps node to group
     val byNode = mutable.HashMap[String, String]()
-    label2group.foreach {
-      case (group, nodes) =>
-        nodes.foreach { node =>
-          byNode(node) = group
-        }
+    label2group.foreach { case (group, nodes) =>
+      nodes.foreach { node =>
+        byNode(node) = group
+      }
     }
     val groupNamespace = label2group.map { case (head, set) => head -> Namespace(set.toSeq) }
 
@@ -317,8 +310,7 @@ class GroupComponents extends Transform with DependencyAPIMigration {
       w
   }
 
-  /**
-    * Compute how each component connects to each other component
+  /** Compute how each component connects to each other component
     * It is non-directioned; there is an edge from source to sink and from sink to souce
     * @param m module to compute connectivity
     * @return a bi-directional representation of component connectivity
@@ -365,8 +357,7 @@ class GroupComponents extends Transform with DependencyAPIMigration {
   }
 }
 
-/**
-  * Splits a module into multiple modules by grouping its components via [[GroupAnnotation]]'s
+/** Splits a module into multiple modules by grouping its components via [[GroupAnnotation]]'s
   * Tries to deduplicate the resulting circuit
   */
 class GroupAndDedup extends GroupComponents {

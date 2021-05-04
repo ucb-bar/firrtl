@@ -152,8 +152,8 @@ object RemoveCHIRRTL extends Transform with DependencyAPIMigration {
           val es = create_all_exps(WRef(sx.name, sx.tpe))
           val rs = create_all_exps(WRef(s"${sx.mem}.${sx.name}.rdata", sx.tpe))
           val ws = create_all_exps(WRef(s"${sx.mem}.${sx.name}.wdata", sx.tpe))
-          ((es.zip(rs)).zip(ws)).map {
-            case ((e, r), w) => renames.rename(e.serialize, Seq(r.serialize, w.serialize))
+          ((es.zip(rs)).zip(ws)).map { case ((e, r), w) =>
+            renames.rename(e.serialize, Seq(r.serialize, w.serialize))
           }
         case MWrite =>
           refs(sx.name) = DataRef(portRef, "data", "data", "mask", rdwrite = false)
@@ -164,8 +164,8 @@ object RemoveCHIRRTL extends Transform with DependencyAPIMigration {
           renames.rename(sx.name, s"${sx.mem}.${sx.name}.data")
           val es = create_all_exps(WRef(sx.name, sx.tpe))
           val ws = create_all_exps(WRef(s"${sx.mem}.${sx.name}.data", sx.tpe))
-          (es.zip(ws)).map {
-            case (e, w) => renames.rename(e.serialize, w.serialize)
+          (es.zip(ws)).map { case (e, w) =>
+            renames.rename(e.serialize, w.serialize)
           }
         case MRead =>
           refs(sx.name) = DataRef(portRef, "data", "data", "blah", rdwrite = false)
@@ -179,8 +179,8 @@ object RemoveCHIRRTL extends Transform with DependencyAPIMigration {
           renames.rename(sx.name, s"${sx.mem}.${sx.name}.data")
           val es = create_all_exps(WRef(sx.name, sx.tpe))
           val rs = create_all_exps(WRef(s"${sx.mem}.${sx.name}.data", sx.tpe))
-          (es.zip(rs)).map {
-            case (e, r) => renames.rename(e.serialize, r.serialize)
+          (es.zip(rs)).map { case (e, r) =>
+            renames.rename(e.serialize, r.serialize)
           }
         case MInfer => // do nothing if it's not being used
       }

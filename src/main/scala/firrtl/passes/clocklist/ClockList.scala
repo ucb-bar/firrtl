@@ -50,14 +50,13 @@ class ClockList(top: String, writer: Writer) extends Pass {
     val origins = getOrigins(connects, "", moduleMap)(lineages)
 
     // If the clock origin is contained in the source list, label good (otherwise bad)
-    origins.foreach {
-      case (instance, origin) =>
-        val sep = if (instance == "") "" else "."
-        if (!sourceList.contains(origin.replace('.', '$'))) {
-          outputBuffer.append(s"Bad Origin of $instance${sep}clock is $origin\n")
-        } else {
-          outputBuffer.append(s"Good Origin of $instance${sep}clock is $origin\n")
-        }
+    origins.foreach { case (instance, origin) =>
+      val sep = if (instance == "") "" else "."
+      if (!sourceList.contains(origin.replace('.', '$'))) {
+        outputBuffer.append(s"Bad Origin of $instance${sep}clock is $origin\n")
+      } else {
+        outputBuffer.append(s"Good Origin of $instance${sep}clock is $origin\n")
+      }
     }
 
     // Write to output file

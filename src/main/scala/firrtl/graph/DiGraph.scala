@@ -76,8 +76,7 @@ class DiGraph[T](private[graph] val edges: LinkedHashMap[T, LinkedHashSet[T]]) {
     */
   def findSinks: Set[T] = reverse.findSources
 
-  /**
-    * Finds a Seq of Nodes that form a loop
+  /** Finds a Seq of Nodes that form a loop
     * @param node Node to start loop path search from.
     * @return     The found Seq, the Seq is empty if there is no loop
     */
@@ -330,9 +329,8 @@ class DiGraph[T](private[graph] val edges: LinkedHashMap[T, LinkedHashSet[T]]) {
   def reverse: DiGraph[T] = {
     val mdg = new MutableDiGraph[T]
     edges.foreach({ case (u, edges) => mdg.addVertex(u) })
-    edges.foreach({
-      case (u, edges) =>
-        edges.foreach(v => mdg.addEdge(v, u))
+    edges.foreach({ case (u, edges) =>
+      edges.foreach(v => mdg.addEdge(v, u))
     })
     DiGraph(mdg)
   }

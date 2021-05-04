@@ -87,8 +87,8 @@ class InstanceGraph(c: Circuit) {
       case main if main == c.main => foo += main.OfModule -> 1
       case other                  => foo += other.OfModule -> 0
     }
-    childInstances.values.flatten.map(_.OfModule).foreach {
-      case mod => foo += mod -> (foo(mod) + 1)
+    childInstances.values.flatten.map(_.OfModule).foreach { case mod =>
+      foo += mod -> (foo(mod) + 1)
     }
     foo.toMap
   }
@@ -120,8 +120,7 @@ class InstanceGraph(c: Circuit) {
     tour.rmq(moduleA, moduleB)
   }
 
-  /**
-    * Module order from highest module to leaf module
+  /** Module order from highest module to leaf module
     * @return sequence of modules in order from top to leaf
     */
   @deprecated("Use InstanceKeyGraph.moduleOrder instead.", "FIRRTL 1.4")

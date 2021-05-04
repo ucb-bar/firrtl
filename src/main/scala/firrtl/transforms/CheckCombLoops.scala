@@ -14,8 +14,7 @@ import firrtl.graph._
 import firrtl.analyses.InstanceKeyGraph
 import firrtl.options.{Dependency, RegisteredTransform, ShellOption}
 
-/**
-  * A case class that represents a net in the circuit. This is necessary since combinational loop
+/** A case class that represents a net in the circuit. This is necessary since combinational loop
   * checking is an analysis on the netlist of the circuit; the fields are specialized for low FIRRTL.
   * Since all wires are ground types, a given ground type net may only be a subfield of an instance
   * or a memory port. Therefore, it is uniquely specified within its module context by its name, its
@@ -25,8 +24,7 @@ case class LogicNode(name: String, inst: Option[String] = None, memport: Option[
 
 object LogicNode {
 
-  /**
-    * Construct a LogicNode from a *Low FIRRTL* reference or subfield that refers to a component.
+  /** Construct a LogicNode from a *Low FIRRTL* reference or subfield that refers to a component.
     * Since aggregate types appear in Low FIRRTL only as the full types of instances or memories,
     * the only reference-like expressions that may appear are WRefs, or trees of up to two levels of
     * WSubField field selection.
@@ -74,8 +72,8 @@ case class ExtModulePathAnnotation(source: ReferenceTarget, sink: ReferenceTarge
     val sources = renames.get(source).getOrElse(Seq(source))
     val sinks = renames.get(sink).getOrElse(Seq(sink))
     val paths = sources.flatMap { s => sinks.map((s, _)) }
-    paths.collect {
-      case (source: ReferenceTarget, sink: ReferenceTarget) => ExtModulePathAnnotation(source, sink)
+    paths.collect { case (source: ReferenceTarget, sink: ReferenceTarget) =>
+      ExtModulePathAnnotation(source, sink)
     }
   }
 }
@@ -179,16 +177,15 @@ class CheckCombLoops extends Transform with RegisteredTransform with DependencyA
     def info(u: LogicNode, v: LogicNode): String =
       moduleGraphs(m).getEdgeData(u, v).map(_.toString).mkString("\t", "", "")
     // lhs comes after rhs
-    val pathNodes = (path.zip(path.tail)).map {
-      case (rhs, lhs) =>
-        if (lhs.inst.isDefined && !lhs.memport.isDefined && lhs.inst == rhs.inst) {
-          val child = moduleDeps(m)(lhs.inst.get)
-          val newHierPrefix = hierPrefix :+ lhs.inst.get
-          val subpath = moduleGraphs(child).path(lhs.copy(inst = None), rhs.copy(inst = None)).reverse
-          expandInstancePaths(child, moduleGraphs, moduleDeps, newHierPrefix, subpath)
-        } else {
-          Seq(prettyPrintAbsoluteRef(hierPrefix, lhs) ++ info(lhs, rhs))
-        }
+    val pathNodes = (path.zip(path.tail)).map { case (rhs, lhs) =>
+      if (lhs.inst.isDefined && !lhs.memport.isDefined && lhs.inst == rhs.inst) {
+        val child = moduleDeps(m)(lhs.inst.get)
+        val newHierPrefix = hierPrefix :+ lhs.inst.get
+        val subpath = moduleGraphs(child).path(lhs.copy(inst = None), rhs.copy(inst = None)).reverse
+        expandInstancePaths(child, moduleGraphs, moduleDeps, newHierPrefix, subpath)
+      } else {
+        Seq(prettyPrintAbsoluteRef(hierPrefix, lhs) ++ info(lhs, rhs))
+      }
     }
     pathNodes.flatten
   }
@@ -254,9 +251,8 @@ class CheckCombLoops extends Transform with RegisteredTransform with DependencyA
         val portSet = em.ports.map(p => LogicNode(p.name)).toSet
         val extModuleDeps = new MutableDiGraph[LogicNode] with MutableEdgeData[LogicNode, Info]
         portSet.foreach(extModuleDeps.addVertex(_))
-        extModulePaths.getOrElse(ModuleTarget(c.main, em.name), Nil).collect {
-          case a: ExtModulePathAnnotation =>
-            extModuleDeps.addPairWithEdge(LogicNode(a.sink.ref), LogicNode(a.source.ref))
+        extModulePaths.getOrElse(ModuleTarget(c.main, em.name), Nil).collect { case a: ExtModulePathAnnotation =>
+          extModuleDeps.addPairWithEdge(LogicNode(a.sink.ref), LogicNode(a.source.ref))
         }
         moduleGraphs(em.name) = extModuleDeps
         simplifiedModuleGraphs(em.name) = extModuleDeps.simplify(portSet)
@@ -293,18 +289,16 @@ class CheckCombLoops extends Transform with RegisteredTransform with DependencyA
     (state.copy(annotations = state.annotations ++ annos), errors, simplifiedModuleGraphs, moduleGraphs)
   }
 
-  /**
-    * Returns a Map from Module name to port connectivity
+  /** Returns a Map from Module name to port connectivity
     */
   def analyze(state: CircuitState): collection.Map[String, DiGraph[String]] = {
     val (result, errors, connectivity, _) = run(state)
-    connectivity.map {
-      case (k, v) => (k, v.transformNodes(ln => ln.name))
+    connectivity.map { case (k, v) =>
+      (k, v.transformNodes(ln => ln.name))
     }
   }
 
-  /**
-    * Returns a Map from Module name to complete netlist connectivity
+  /** Returns a Map from Module name to complete netlist connectivity
     */
   def analyzeFull(state: CircuitState): collection.Map[String, DiGraph[LogicNode]] = {
     run(state)._4

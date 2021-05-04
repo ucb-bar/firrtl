@@ -11,8 +11,7 @@ import firrtl.testutils.LeanTransformSpec
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-/**
-  * An example methodology for testing Firrtl compilers.
+/** An example methodology for testing Firrtl compilers.
   *
   * Given an input Firrtl circuit (expressed as a string),
   * the compiler is executed. The output of the compiler
@@ -23,8 +22,7 @@ abstract class CompilerSpec(emitter: Dependency[firrtl.Emitter]) extends LeanTra
   def getOutput: String = compile(input).getEmittedCircuit.value
 }
 
-/**
-  * An example test for testing the HighFirrtlCompiler.
+/** An example test for testing the HighFirrtlCompiler.
   *
   * Given an input Firrtl circuit (expressed as a string),
   * the compiler is executed. The output of the compiler
@@ -44,8 +42,7 @@ class HighFirrtlCompilerSpec extends CompilerSpec(Dependency[firrtl.HighFirrtlEm
   }
 }
 
-/**
-  * An example test for testing the MiddleFirrtlCompiler.
+/** An example test for testing the MiddleFirrtlCompiler.
   *
   * Given an input Firrtl circuit (expressed as a string),
   * the compiler is executed. The output of the compiler is
@@ -79,8 +76,7 @@ circuit Top :
   }
 }
 
-/**
-  * An example test for testing the LoweringCompiler.
+/** An example test for testing the LoweringCompiler.
   *
   * Given an input Firrtl circuit (expressed as a string),
   * the compiler is executed. The output of the compiler is
@@ -108,8 +104,7 @@ circuit Top :
   }
 }
 
-/**
-  * An example test for testing the VerilogCompiler.
+/** An example test for testing the VerilogCompiler.
   *
   * Given an input Firrtl circuit (expressed as a string),
   * the compiler is executed. The output of the compiler is

@@ -4,15 +4,13 @@ package firrtl.graph
 
 import scala.collection.mutable
 
-/**
-  * An exception that indicates that an edge cannot be found in a graph with edge data.
+/** An exception that indicates that an edge cannot be found in a graph with edge data.
   *
   * @note the vertex type is not captured as a type parameter, as it would be erased.
   */
 class EdgeNotFoundException(u: Any, v: Any) extends IllegalArgumentException(s"Edge (${u}, ${v}) does not exist!")
 
-/**
-  * Mixing this trait into a DiGraph indicates that each edge may be associated with an optional
+/** Mixing this trait into a DiGraph indicates that each edge may be associated with an optional
   * data value. The EdgeData trait provides a minimal API for viewing edge data without mutation.
   *
   * @tparam V the vertex type (datatype) of the underlying DiGraph
@@ -28,8 +26,7 @@ trait EdgeData[V, E] {
     }
   }
 
-  /**
-    * @return the edge data associated with a given edge
+  /** @return the edge data associated with a given edge
     * @param u the source of the edge
     * @param v the destination of the edge
     * @throws EdgeNotFoundException if the edge does not exist
@@ -40,8 +37,7 @@ trait EdgeData[V, E] {
     edgeDataMap((u, v))
   }
 
-  /**
-    * Optionally return the edge data associated with a given edge.
+  /** Optionally return the edge data associated with a given edge.
     *
     * @return an option containing the edge data, if any, or None
     * @param u the source of the edge
@@ -50,8 +46,7 @@ trait EdgeData[V, E] {
   def getEdgeData(u: V, v: V): Option[E] = edgeDataMap.get((u, v))
 }
 
-/**
-  * Mixing this trait into a DiGraph indicates that each edge may be associated with an optional
+/** Mixing this trait into a DiGraph indicates that each edge may be associated with an optional
   * data value. The MutableEdgeData trait provides an API for viewing and mutating edge data.
   *
   * @tparam V the vertex type (datatype) of the underlying DiGraph
@@ -62,8 +57,7 @@ trait MutableEdgeData[V, E] extends EdgeData[V, E] {
 
   protected val edgeDataMap: mutable.Map[(V, V), E] = new mutable.LinkedHashMap[(V, V), E]
 
-  /**
-    * Associate an edge data value with a graph edge.
+  /** Associate an edge data value with a graph edge.
     *
     * @param u the source of the edge
     * @param v the destination of the edge
@@ -101,8 +95,7 @@ trait MutableEdgeData[V, E] extends EdgeData[V, E] {
     setEdgeData(u, v, data)
   }
 
-  /**
-    * Safely add an edge (u,v) to the graph with associated edge data if and only if both vertices
+  /** Safely add an edge (u,v) to the graph with associated edge data if and only if both vertices
     * are present in the graph. This is useful for preventing spurious edge creating when examining
     * a subset of possible nodes.
     *

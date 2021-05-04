@@ -217,11 +217,10 @@ private[firrtl] object Transform {
     logger.trace {
       JsonProtocol
         .serializeTry(remappedAnnotations)
-        .recoverWith {
-          case NonFatal(e) =>
-            val msg = s"Exception thrown during Annotation serialization:\n  " +
-              e.toString.replaceAll("\n", "\n  ")
-            Try(msg)
+        .recoverWith { case NonFatal(e) =>
+          val msg = s"Exception thrown during Annotation serialization:\n  " +
+            e.toString.replaceAll("\n", "\n  ")
+          Try(msg)
         }
         .get
     }
@@ -492,23 +491,21 @@ object CompilerUtils extends LazyLogging {
     "FIRRTL 1.3"
   )
   def mergeTransforms(lowering: Seq[Transform], custom: Seq[Transform]): Seq[Transform] = {
-    custom.sortWith {
-      case (a, b) =>
-        (a, b) match {
-          case (_: Emitter, _: Emitter) => false
-          case (_, _: Emitter) => true
-          case _ => false
-        }
+    custom.sortWith { case (a, b) =>
+      (a, b) match {
+        case (_: Emitter, _: Emitter) => false
+        case (_, _: Emitter) => true
+        case _ => false
+      }
     }
-      .foldLeft(lowering) {
-        case (transforms, xform) =>
-          val index = transforms.lastIndexWhere(_.outputForm == xform.inputForm)
-          assert(
-            index >= 0 || xform.inputForm == ChirrtlForm, // If ChirrtlForm just put at front
-            s"No transform in $lowering has outputForm ${xform.inputForm} as required by $xform"
-          )
-          val (front, back) = transforms.splitAt(index + 1) // +1 because we want to be AFTER index
-          front ++ List(xform) ++ getLoweringTransforms(xform.outputForm, xform.inputForm) ++ back
+      .foldLeft(lowering) { case (transforms, xform) =>
+        val index = transforms.lastIndexWhere(_.outputForm == xform.inputForm)
+        assert(
+          index >= 0 || xform.inputForm == ChirrtlForm, // If ChirrtlForm just put at front
+          s"No transform in $lowering has outputForm ${xform.inputForm} as required by $xform"
+        )
+        val (front, back) = transforms.splitAt(index + 1) // +1 because we want to be AFTER index
+        front ++ List(xform) ++ getLoweringTransforms(xform.outputForm, xform.inputForm) ++ back
       }
   }
 

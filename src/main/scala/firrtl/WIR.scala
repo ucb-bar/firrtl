@@ -278,13 +278,12 @@ object WrappedType {
         sink.size == source.size && compare(sink.tpe, source.tpe)
       case (sink: BundleType, source: BundleType) =>
         (sink.fields.size == source.fields.size) &&
-          sink.fields.zip(source.fields).forall {
-            case (f1, f2) =>
-              (f1.flip == f2.flip) && (f1.name == f2.name) && (f1.flip match {
-                case Default => compare(f1.tpe, f2.tpe)
-                // We allow UInt<1> and AsyncReset to drive Reset but not the other way around
-                case Flip => compare(f2.tpe, f1.tpe)
-              })
+          sink.fields.zip(source.fields).forall { case (f1, f2) =>
+            (f1.flip == f2.flip) && (f1.name == f2.name) && (f1.flip match {
+              case Default => compare(f1.tpe, f2.tpe)
+              // We allow UInt<1> and AsyncReset to drive Reset but not the other way around
+              case Flip => compare(f2.tpe, f1.tpe)
+            })
           }
       case _ => false
     }

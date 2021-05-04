@@ -149,8 +149,8 @@ class EliminateTargetPathsSpec extends FirrtlPropSpec with FirrtlMatchers {
         |    m2.i <= m1.o""".stripMargin
 
     canonicalize(outputState.circuit).serialize should be(canonicalize(parse(check)).serialize)
-    outputState.annotations.collect {
-      case x: DontTouchAnnotation => x.target
+    outputState.annotations.collect { case x: DontTouchAnnotation =>
+      x.target
     } should be(Seq(Top.circuitTarget.module("Top").instOf("m1", "Middle").instOf("l1", "Leaf").ref("a")))
   }
 
@@ -429,8 +429,8 @@ class EliminateTargetPathsSpec extends FirrtlPropSpec with FirrtlMatchers {
     info(output.circuit.serialize)
 
     output.circuit.serialize should be(inputCircuit.serialize)
-    (output.annotations.collect {
-      case a: DontTouchAnnotation => a
+    (output.annotations.collect { case a: DontTouchAnnotation =>
+      a
     } should contain).allOf(
       DontTouchAnnotation(ModuleTarget("Foo", "Foo").ref("foo")),
       DontTouchAnnotation(ModuleTarget("Foo", "Bar").ref("foo")),
@@ -472,8 +472,8 @@ class EliminateTargetPathsSpec extends FirrtlPropSpec with FirrtlMatchers {
       outputLines should contain(line)
     }
 
-    (output.annotations.collect {
-      case a: DontTouchAnnotation => a
+    (output.annotations.collect { case a: DontTouchAnnotation =>
+      a
     } should contain).allOf(
       DontTouchAnnotation(ModuleTarget("FooBar", "Bar___Foo_bar").ref("baz")),
       DontTouchAnnotation(ModuleTarget("FooBar", "Bar___Foo_barBar").ref("baz"))
@@ -517,8 +517,8 @@ class EliminateTargetPathsSpec extends FirrtlPropSpec with FirrtlMatchers {
     checks.foreach { line =>
       outputLines should contain(line)
     }
-    (output.annotations.collect {
-      case a: DontTouchAnnotation => a
+    (output.annotations.collect { case a: DontTouchAnnotation =>
+      a
     } should contain).allOf(
       DontTouchAnnotation(ModuleTarget("Top", "Baz_0").ref("foo")),
       DontTouchAnnotation(ModuleTarget("Top", "Baz_1").ref("foo"))

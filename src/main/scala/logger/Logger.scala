@@ -10,8 +10,7 @@ import logger.phases.{AddDefaults, Checks}
 
 import scala.util.DynamicVariable
 
-/**
-  * This provides a facility for a log4scala* type logging system.  Why did we write our own?  Because
+/** This provides a facility for a log4scala* type logging system.  Why did we write our own?  Because
   * the canned ones are just too darned hard to turn on, particularly when embedded in a distribution.
   * This one can be turned on programmatically or with the options exposed in the [[firrtl.CommonOptions]]
   * and [[ExecutionOptionsManager]] APIs in firrtl.
@@ -26,8 +25,7 @@ import scala.util.DynamicVariable
   *  occurring if the the logging level is not sufficiently high. This could be further optimized by playing
   *  with methods.
   */
-/**
-  * The supported log levels, what do they mean? Whatever you want them to.
+/** The supported log levels, what do they mean? Whatever you want them to.
   */
 object LogLevel extends Enumeration {
   val Error, Warn, Info, Debug, Trace, None = Value
@@ -42,16 +40,14 @@ object LogLevel extends Enumeration {
   }
 }
 
-/**
-  * extend this trait to enable logging in a class you are implementing
+/** extend this trait to enable logging in a class you are implementing
   */
 trait LazyLogging {
   protected val logger = new Logger(this.getClass.getName)
   def getLogger: Logger = logger
 }
 
-/**
-  * Mutable state of the logging system.  Multiple LoggerStates may be present
+/** Mutable state of the logging system.  Multiple LoggerStates may be present
   * when used in multi-threaded environments
   */
 private class LoggerState {
@@ -67,8 +63,7 @@ private class LoggerState {
     s"gl $globalLevel classLevels ${classLevels.mkString("\n")}"
   }
 
-  /**
-    * create a new state object copying the basic values of this state
+  /** create a new state object copying the basic values of this state
     * @return new state object
     */
   def copy: LoggerState = {
@@ -81,8 +76,7 @@ private class LoggerState {
   }
 }
 
-/**
-  * Singleton in control of what is supposed to get logged, how it's to be logged and where it is to be logged
+/** Singleton in control of what is supposed to get logged, how it's to be logged and where it is to be logged
   * We uses a dynamic variable in case multiple threads are used as can be in scalatests
   */
 object Logger {
@@ -91,31 +85,27 @@ object Logger {
     updatableLoggerState.value.get
   }
 
-  /**
-    * a class for managing capturing logging output in a string buffer
+  /** a class for managing capturing logging output in a string buffer
     */
   class OutputCaptor {
     val byteArrayOutputStream = new ByteArrayOutputStream()
     val printStream = new PrintStream(byteArrayOutputStream)
 
-    /**
-      * Get logged messages to this captor as a string
+    /** Get logged messages to this captor as a string
       * @return
       */
     def getOutputAsString: String = {
       byteArrayOutputStream.toString
     }
 
-    /**
-      * Clear the string buffer
+    /** Clear the string buffer
       */
     def clear(): Unit = {
       byteArrayOutputStream.reset()
     }
   }
 
-  /**
-    * This creates a block of code that will have access to the
+  /** This creates a block of code that will have access to the
     * thread specific logger.  The state will be set according to the
     * logging options set in the common options of the manager
     * @param manager  source of logger settings
@@ -127,8 +117,7 @@ object Logger {
   def makeScope[A](manager: ExecutionOptionsManager)(codeBlock: => A): A =
     makeScope(manager.commonOptions.toAnnotations)(codeBlock)
 
-  /**
-    * See makeScope using manager.  This creates a manager from a command line arguments style
+  /** See makeScope using manager.  This creates a manager from a command line arguments style
     * list of strings
     * @param args List of strings
     * @param codeBlock  the block to call
@@ -168,8 +157,7 @@ object Logger {
     }
   }
 
-  /**
-    * Used to test whether a given log statement should generate some logging output.
+  /** Used to test whether a given log statement should generate some logging output.
     * It breaks up a class name into a list of packages.  From this list generate progressively
     * broader names (lopping off from right side) checking for a match
     * @param className  class name that the logging statement came from
@@ -217,8 +205,7 @@ object Logger {
     }
   }
 
-  /**
-    * Used as the common log routine, for warn, debug etc.  Only calls message if log should be generated
+  /** Used as the common log routine, for warn, debug etc.  Only calls message if log should be generated
     * Allows lazy evaluation of any string interpolation or function that generates the message itself
     * @note package level supercedes global, which allows one to turn on debug everywhere except for specific classes
     * @param level     level of the called statement
@@ -250,8 +237,7 @@ object Logger {
     state.globalLevel
   }
 
-  /**
-    * This resets everything in the current Logger environment, including the destination
+  /** This resets everything in the current Logger environment, including the destination
     * use this with caution.  Unexpected things can happen
     */
   def reset(): Unit = {
@@ -262,23 +248,20 @@ object Logger {
     state.stream = System.out
   }
 
-  /**
-    * clears the cache of class names top class specific log levels
+  /** clears the cache of class names top class specific log levels
     */
   private def clearCache(): Unit = {
     state.classToLevelCache.clear()
   }
 
-  /**
-    * This sets the global logging level
+  /** This sets the global logging level
     * @param level  The desired global logging level
     */
   def setLevel(level: LogLevel.Value): Unit = {
     state.globalLevel = level
   }
 
-  /**
-    * This sets the logging level for a particular class or package
+  /** This sets the logging level for a particular class or package
     * The package name must be general to specific.  I.e.
     * package1.package2.class
     * package1.package2
@@ -293,8 +276,7 @@ object Logger {
     state.classLevels(classOrPackageName) = level
   }
 
-  /**
-    * Set the log level based on a class type
+  /** Set the log level based on a class type
     * @example {{{ setLevel(classOf[SomeClass], LogLevel.Debug) }}}
     * @param classType Kind of class
     * @param level log level to set
@@ -305,8 +287,7 @@ object Logger {
     state.classLevels(name) = level
   }
 
-  /**
-    * Clears the logging data in the string capture buffer if it exists
+  /** Clears the logging data in the string capture buffer if it exists
     * @return The logging data if it exists
     */
   def clearStringBuffer(): Unit = {
@@ -316,31 +297,27 @@ object Logger {
     }
   }
 
-  /**
-    * Set the logging destination to a file name
+  /** Set the logging destination to a file name
     * @param fileName destination name
     */
   def setOutput(fileName: String): Unit = {
     state.stream = new PrintStream(new FileOutputStream(new File(fileName)))
   }
 
-  /**
-    * Set the logging destination to a print stream
+  /** Set the logging destination to a print stream
     * @param stream destination stream
     */
   def setOutput(stream: PrintStream): Unit = {
     state.stream = stream
   }
 
-  /**
-    * Sets the logging destination to Console.out
+  /** Sets the logging destination to Console.out
     */
   def setConsole(): Unit = {
     state.stream = Console.out
   }
 
-  /**
-    * Adds a list of of className, loglevel tuples to the global (dynamicVar)
+  /** Adds a list of of className, loglevel tuples to the global (dynamicVar)
     * See testPackageNameMatch for a description of how class name matching works
     * @param namesToLevel a list of tuples (class name, log level)
     */
@@ -349,8 +326,7 @@ object Logger {
     state.classLevels ++= namesToLevel
   }
 
-  /**
-    * This is used to set the options that have been set in a optionsManager or are coming
+  /** This is used to set the options that have been set in a optionsManager or are coming
     * from the command line via an options manager
     * @param optionsManager manager
     */
@@ -384,46 +360,40 @@ object Logger {
   }
 }
 
-/**
-  * Classes implementing [[LazyLogging]] will have logger of this type
+/** Classes implementing [[LazyLogging]] will have logger of this type
   * @param containerClass  passed in from the LazyLogging trait in order to provide class level logging granularity
   */
 class Logger(containerClass: String) {
 
-  /**
-    * Log message at Error level
+  /** Log message at Error level
     * @param message message generator to be invoked if level is right
     */
   def error(message: => String): Unit = {
     Logger.showMessage(LogLevel.Error, containerClass, message)
   }
 
-  /**
-    * Log message at Warn level
+  /** Log message at Warn level
     * @param message message generator to be invoked if level is right
     */
   def warn(message: => String): Unit = {
     Logger.showMessage(LogLevel.Warn, containerClass, message)
   }
 
-  /**
-    * Log message at Inof level
+  /** Log message at Inof level
     * @param message message generator to be invoked if level is right
     */
   def info(message: => String): Unit = {
     Logger.showMessage(LogLevel.Info, containerClass, message)
   }
 
-  /**
-    * Log message at Debug level
+  /** Log message at Debug level
     * @param message message generator to be invoked if level is right
     */
   def debug(message: => String): Unit = {
     Logger.showMessage(LogLevel.Debug, containerClass, message)
   }
 
-  /**
-    * Log message at Trace level
+  /** Log message at Trace level
     * @param message message generator to be invoked if level is right
     */
   def trace(message: => String): Unit = {

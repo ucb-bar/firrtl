@@ -100,11 +100,10 @@ class DedupModules extends Transform with DependencyAPIMigration {
         case _: DupedResult => false
         case _ => true
       }
-      val previouslyDupedMap = dupResults.flatMap {
-        case DupedResult(newModules, original) =>
-          newModules.collect {
-            case m: ModuleTarget => m.module -> original.module
-          }
+      val previouslyDupedMap = dupResults.flatMap { case DupedResult(newModules, original) =>
+        newModules.collect { case m: ModuleTarget =>
+          m.module -> original.module
+        }
       }.toMap
       val (newC, renameMap, newAnnos) = run(state.circuit, noDedups, previouslyDupedMap)
       state.copy(circuit = newC, renames = Some(renameMap), annotations = newAnnos ++ remainingAnnotations)
@@ -129,14 +128,12 @@ class DedupModules extends Transform with DependencyAPIMigration {
     // Maps module name to corresponding dedup module
     val dedupMap = DedupModules.deduplicate(c, noDedups.toSet, previouslyDupedMap, componentRenameMap)
     val dedupCliques = dedupMap
-      .foldLeft(Map.empty[String, Set[String]]) {
-        case (dedupCliqueMap, (orig: String, dupMod: DefModule)) =>
-          val set = dedupCliqueMap.getOrElse(dupMod.name, Set.empty[String]) + dupMod.name + orig
-          dedupCliqueMap + (dupMod.name -> set)
+      .foldLeft(Map.empty[String, Set[String]]) { case (dedupCliqueMap, (orig: String, dupMod: DefModule)) =>
+        val set = dedupCliqueMap.getOrElse(dupMod.name, Set.empty[String]) + dupMod.name + orig
+        dedupCliqueMap + (dupMod.name -> set)
       }
-      .flatMap {
-        case (dedupName, set) =>
-          set.map { _ -> set }
+      .flatMap { case (dedupName, set) =>
+        set.map { _ -> set }
       }
 
     // Use old module list to preserve ordering
@@ -156,10 +153,9 @@ class DedupModules extends Transform with DependencyAPIMigration {
 
     val ct = CircuitTarget(c.main)
 
-    val map = dedupMap.map {
-      case (from, to) =>
-        logger.debug(s"[Dedup] $from -> ${to.name}")
-        ct.module(from).asInstanceOf[CompleteTarget] -> Seq(ct.module(to.name))
+    val map = dedupMap.map { case (from, to) =>
+      logger.debug(s"[Dedup] $from -> ${to.name}")
+      ct.module(from).asInstanceOf[CompleteTarget] -> Seq(ct.module(to.name))
     }
     val moduleRenameMap = RenameMap()
     moduleRenameMap.recordAll(map)
@@ -194,16 +190,15 @@ class DedupModules extends Transform with DependencyAPIMigration {
     }
 
     val instanceNameMap: Map[OfModule, Map[Instance, Instance]] = {
-      dedupMap.map {
-        case (oldName, dedupedMod) =>
-          val key = OfModule(oldName)
-          val value = getChildrenInstances(oldName)
-            .zip(getChildrenInstances(dedupedMod.name))
-            .map {
-              case (oldInst, newInst) => Instance(oldInst.name) -> Instance(newInst.name)
-            }
-            .toMap
-          key -> value
+      dedupMap.map { case (oldName, dedupedMod) =>
+        val key = OfModule(oldName)
+        val value = getChildrenInstances(oldName)
+          .zip(getChildrenInstances(dedupedMod.name))
+          .map { case (oldInst, newInst) =>
+            Instance(oldInst.name) -> Instance(newInst.name)
+          }
+          .toMap
+        key -> value
       }.toMap
     }
     val dedupAnnotations = c.modules.map(_.name).map(ct.module).flatMap {
@@ -215,21 +210,20 @@ class DedupModules extends Transform with DependencyAPIMigration {
             // If dedupedAnnos is exactly annos, contains is because dedupedAnnos is type Option
             val newTargets = paths.map { path =>
               val root: IsModule = ct.module(c)
-              path.foldLeft(root -> root) {
-                case ((oldRelPath, newRelPath), InstanceKeyGraph.InstanceKey(name, mod)) =>
-                  if (mod == c) {
-                    val mod = CircuitTarget(c).module(c)
-                    mod -> mod
-                  } else {
-                    val enclosingMod = oldRelPath match {
-                      case i: InstanceTarget => i.ofModule
-                      case m: ModuleTarget   => m.module
-                    }
-                    val instMap = instanceNameMap(OfModule(enclosingMod))
-                    val newInstName = instMap(Instance(name)).value
-                    val old = oldRelPath.instOf(name, mod)
-                    old -> newRelPath.instOf(newInstName, mod)
+              path.foldLeft(root -> root) { case ((oldRelPath, newRelPath), InstanceKeyGraph.InstanceKey(name, mod)) =>
+                if (mod == c) {
+                  val mod = CircuitTarget(c).module(c)
+                  mod -> mod
+                } else {
+                  val enclosingMod = oldRelPath match {
+                    case i: InstanceTarget => i.ofModule
+                    case m: ModuleTarget   => m.module
                   }
+                  val instMap = instanceNameMap(OfModule(enclosingMod))
+                  val newInstName = instMap(Instance(name)).value
+                  val old = oldRelPath.instOf(name, mod)
+                  old -> newRelPath.instOf(newInstName, mod)
+                }
               }
             }
 
@@ -526,16 +520,15 @@ object DedupModules extends LazyLogging {
     val tag2name = mutable.HashMap.empty[String, String]
 
     // Maps a deduped module name to its original Module (its instance names need to be updated)
-    val moduleMapWithOldNames = tag2all.map {
-      case (tag, all: collection.Set[String]) =>
-        val dedupWithoutOldName = all.reduce(order)
-        val dedupName = previousDupResults.getOrElse(dedupWithoutOldName, dedupWithoutOldName)
-        tag2name(tag) = dedupName
-        val dedupModule = moduleMap(dedupWithoutOldName) match {
-          case e: ExtModule => e.copy(name = dedupName)
-          case e: Module    => e.copy(name = dedupName)
-        }
-        dedupName -> dedupModule
+    val moduleMapWithOldNames = tag2all.map { case (tag, all: collection.Set[String]) =>
+      val dedupWithoutOldName = all.reduce(order)
+      val dedupName = previousDupResults.getOrElse(dedupWithoutOldName, dedupWithoutOldName)
+      tag2name(tag) = dedupName
+      val dedupModule = moduleMap(dedupWithoutOldName) match {
+        case e: ExtModule => e.copy(name = dedupName)
+        case e: Module    => e.copy(name = dedupName)
+      }
+      dedupName -> dedupModule
     }.toMap
 
     // Create map from original to dedup name
@@ -548,8 +541,8 @@ object DedupModules extends LazyLogging {
     }.toMap
 
     // Build Remap for modules with deduped module references
-    val dedupedName2module = tag2name.map {
-      case (tag, name) => name -> DedupModules.dedupInstances(top, name, moduleMapWithOldNames, name2name, renameMap)
+    val dedupedName2module = tag2name.map { case (tag, name) =>
+      name -> DedupModules.dedupInstances(top, name, moduleMapWithOldNames, name2name, renameMap)
     }
 
     // Build map from original name to corresponding deduped module
@@ -561,13 +554,12 @@ object DedupModules extends LazyLogging {
 
     // Build renameMap
     val indexedTargets = mutable.HashMap[String, IndexedSeq[ReferenceTarget]]()
-    name2module.foreach {
-      case (originalName, depModule) =>
-        if (originalName != depModule.name) {
-          val toSeq = indexedTargets.getOrElseUpdate(depModule.name, computeIndexedNames(circuit.main, depModule))
-          val fromSeq = computeIndexedNames(circuit.main, moduleMap(originalName))
-          computeRenameMap(fromSeq, toSeq, renameMap)
-        }
+    name2module.foreach { case (originalName, depModule) =>
+      if (originalName != depModule.name) {
+        val toSeq = indexedTargets.getOrElseUpdate(depModule.name, computeIndexedNames(circuit.main, depModule))
+        val fromSeq = computeIndexedNames(circuit.main, moduleMap(originalName))
+        computeRenameMap(fromSeq, toSeq, renameMap)
+      }
     }
 
     name2module
@@ -593,11 +585,10 @@ object DedupModules extends LazyLogging {
     renameMap:     RenameMap
   ): Unit = {
 
-    originalNames.zip(dedupedNames).foreach {
-      case (o, d) =>
-        if (o.component != d.component || o.ref != d.ref) {
-          renameMap.record(o, d.copy(module = o.module))
-        }
+    originalNames.zip(dedupedNames).foreach { case (o, d) =>
+      if (o.component != d.component || o.ref != d.ref) {
+        renameMap.record(o, d.copy(module = o.module))
+      }
     }
 
   }

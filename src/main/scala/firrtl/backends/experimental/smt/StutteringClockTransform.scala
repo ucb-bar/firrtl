@@ -88,9 +88,8 @@ class StutteringClockTransform extends Transform with DependencyAPIMigration {
     // rename clocks to clock enable signals
     val mRef = CircuitTarget(state.circuit.main).module(main.name)
     val renameMap = RenameMap()
-    scan.clockToEnable.foreach {
-      case (clk, en) =>
-        renameMap.record(mRef.ref(clk), mRef.ref(en.name))
+    scan.clockToEnable.foreach { case (clk, en) =>
+      renameMap.record(mRef.ref(clk), mRef.ref(en.name))
     }
 
     // make changes

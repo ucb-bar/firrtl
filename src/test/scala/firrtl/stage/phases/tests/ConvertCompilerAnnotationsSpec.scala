@@ -22,8 +22,8 @@ class ConvertCompilerAnnotationsSpec extends AnyFlatSpec with Matchers {
     val annotations = Seq(CompilerAnnotation(new HighFirrtlCompiler))
     phase
       .transform(annotations)
-      .map {
-        case RunFirrtlTransformAnnotation(a) => Dependency.fromTransform(a)
+      .map { case RunFirrtlTransformAnnotation(a) =>
+        Dependency.fromTransform(a)
       }
       .toSeq should be(Seq(Dependency[HighFirrtlEmitter]))
   }

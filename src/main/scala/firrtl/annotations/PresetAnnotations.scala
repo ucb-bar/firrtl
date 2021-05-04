@@ -3,8 +3,7 @@
 package firrtl
 package annotations
 
-/**
-  * Transform all registers connected to the targeted AsyncReset tree into bitstream preset registers
+/** Transform all registers connected to the targeted AsyncReset tree into bitstream preset registers
   * Impacts all registers connected to any child (cross module) of the target AsyncReset
   *
   * @param target ReferenceTarget to an AsyncReset
@@ -15,8 +14,7 @@ case class PresetAnnotation(target: ReferenceTarget)
   override def duplicate(n: ReferenceTarget) = this.copy(target = n)
 }
 
-/**
-  * Transform the targeted asynchronously-reset Reg into a bitstream preset Reg
+/** Transform the targeted asynchronously-reset Reg into a bitstream preset Reg
   * Used internally to annotate all registers associated to an AsyncReset tree
   *
   * @param target ReferenceTarget to a Reg

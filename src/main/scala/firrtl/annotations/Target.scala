@@ -277,8 +277,8 @@ case class GenericTarget(circuitOpt: Option[String], moduleOpt: Option[String], 
   override def isLocal: Boolean = !(getPath.nonEmpty && getPath.get.nonEmpty)
 
   def path: Vector[(Instance, OfModule)] = if (isComplete) {
-    tokens.zip(tokens.tail).collect {
-      case (i: Instance, o: OfModule) => (i, o)
+    tokens.zip(tokens.tail).collect { case (i: Instance, o: OfModule) =>
+      (i, o)
     }
   } else Vector.empty[(Instance, OfModule)]
 
@@ -460,9 +460,8 @@ trait IsMember extends CompleteTarget {
   /** @return List of local Instance Targets refering to each instance/ofModule in this member's path */
   def pathAsTargets: Seq[InstanceTarget] = {
     path
-      .foldLeft((module, Vector.empty[InstanceTarget])) {
-        case ((m, vec), (Instance(i), OfModule(o))) =>
-          (o, vec :+ InstanceTarget(circuit, m, Nil, i, o))
+      .foldLeft((module, Vector.empty[InstanceTarget])) { case ((m, vec), (Instance(i), OfModule(o))) =>
+        (o, vec :+ InstanceTarget(circuit, m, Nil, i, o))
       }
       ._2
   }
@@ -526,8 +525,8 @@ trait IsComponent extends IsMember {
     }
   }
 
-  override def justPath: Seq[TargetToken] = path.foldLeft(Vector.empty[TargetToken]) {
-    case (vec, (i, o)) => vec ++ Seq(i, o)
+  override def justPath: Seq[TargetToken] = path.foldLeft(Vector.empty[TargetToken]) { case (vec, (i, o)) =>
+    vec ++ Seq(i, o)
   }
 
   override def pathTarget: IsModule = {

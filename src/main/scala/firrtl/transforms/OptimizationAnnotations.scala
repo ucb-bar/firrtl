@@ -23,13 +23,12 @@ trait HasDontTouches { self: Annotation =>
   def dontTouches: Iterable[ReferenceTarget]
 }
 
-/**
-  * A globalized form of HasDontTouches which applies to all ReferenceTargets
+/** A globalized form of HasDontTouches which applies to all ReferenceTargets
   * provided with the annotation
   */
 trait DontTouchAllTargets extends HasDontTouches { self: Annotation =>
-  def dontTouches: Iterable[ReferenceTarget] = getTargets.collect {
-    case rT: ReferenceTarget => rT
+  def dontTouches: Iterable[ReferenceTarget] = getTargets.collect { case rT: ReferenceTarget =>
+    rT
   }
 }
 

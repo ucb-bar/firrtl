@@ -68,8 +68,7 @@ abstract class MemLatencySpec(rLatency: Int, wLatency: Int, ruw: String)
 trait ToggleMaskAndEnable {
   import MemLatencySpec._
 
-  /**
-    * A canonical sequence of memory accesses for sanity checking memories of different latencies.
+  /** A canonical sequence of memory accesses for sanity checking memories of different latencies.
     * The shortest true "RAW" hazard is reading address 14 two accesses after writing it. Since this
     * access assumed the new value of 87, this means that the access pattern is only valid for
     * certain combinations of read- and write-latencies that vary between read- and write-first

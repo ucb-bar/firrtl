@@ -11,8 +11,7 @@ import firrtl.options.Dependency
 
 import scala.collection.mutable
 
-/**
-  * Verilog has the width of (a % b) = Max(W(a), W(b))
+/** Verilog has the width of (a % b) = Max(W(a), W(b))
   * FIRRTL has the width of (a % b) = Min(W(a), W(b)), which makes more sense,
   * but nevertheless is a problem when emitting verilog
   *

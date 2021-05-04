@@ -150,10 +150,9 @@ class DeadCodeElimination extends Transform with RegisteredTransform with Depend
         sinks.foreach(sink => depGraph.addPairWithEdge(sink, memNode))
         sources.foreach(source => depGraph.addPairWithEdge(memNode, source))
       case Attach(_, exprs) => // Add edge between each expression
-        exprs.flatMap(getDeps(_)).toSet.subsets(2).map(_.toList).foreach {
-          case Seq(a, b) =>
-            depGraph.addPairWithEdge(a, b)
-            depGraph.addPairWithEdge(b, a)
+        exprs.flatMap(getDeps(_)).toSet.subsets(2).map(_.toList).foreach { case Seq(a, b) =>
+          depGraph.addPairWithEdge(a, b)
+          depGraph.addPairWithEdge(b, a)
         }
       case Connect(_, loc, expr) =>
         // This match enforces the low Firrtl requirement of expanded connections
@@ -328,9 +327,8 @@ class DeadCodeElimination extends Transform with RegisteredTransform with Depend
     val c = state.circuit
     val moduleMap = c.modules.map(m => m.name -> m).toMap
     val iGraph = InstanceKeyGraph(c)
-    val moduleDeps = iGraph.graph.getEdgeMap.map({
-      case (k, v) =>
-        k.module -> v.map(i => i.name -> i.module).toMap
+    val moduleDeps = iGraph.graph.getEdgeMap.map({ case (k, v) =>
+      k.module -> v.map(i => i.name -> i.module).toMap
     })
     val topoSortedModules = iGraph.graph.transformNodes(_.module).linearize.reverse.map(moduleMap(_))
 
@@ -361,12 +359,11 @@ class DeadCodeElimination extends Transform with RegisteredTransform with Depend
     // themselves. We iterate over the modules in a topological order from leaves to the top. The
     // current status of the modulesxMap is used to either delete instances or update their types
     val modulesxMap = mutable.HashMap.empty[String, DefModule]
-    topoSortedModules.foreach {
-      case mod =>
-        deleteDeadCode(moduleDeps(mod.name), deadNodes, modulesxMap, renames, c.main, doTouchExtMods)(mod) match {
-          case Some(m) => modulesxMap += m.name -> m
-          case None    => renames.delete(ModuleName(mod.name, CircuitName(c.main)))
-        }
+    topoSortedModules.foreach { case mod =>
+      deleteDeadCode(moduleDeps(mod.name), deadNodes, modulesxMap, renames, c.main, doTouchExtMods)(mod) match {
+        case Some(m) => modulesxMap += m.name -> m
+        case None    => renames.delete(ModuleName(mod.name, CircuitName(c.main)))
+      }
     }
 
     // Preserve original module order

@@ -2,7 +2,7 @@
 
 package firrtl.fuzzer
 
-import com.pholser.junit.quickcheck.generator.{Generator, GenerationStatus}
+import com.pholser.junit.quickcheck.generator.{GenerationStatus, Generator}
 import com.pholser.junit.quickcheck.random.SourceOfRandomness
 
 import firrtl.{Namespace, Utils}
@@ -52,7 +52,6 @@ sealed trait ExprGenParams {
     */
   protected def withRef(ref: Reference): ExprGenParams
 
-
   import GenMonad.syntax._
 
   /** Generator that generates an expression and wraps it in a Module
@@ -63,17 +62,19 @@ sealed trait ExprGenParams {
   private def exprMod[G[_]: GenMonad]: StateGen[ExprGenParams, G, Module] = {
     for {
       width <- StateGen.inspectG((s: ExprGenParams) => ExprGen.genWidth(1, ExprState[ExprGenParams].maxWidth(s)))
-      tpe <- StateGen.liftG(GenMonad.frequency(
-        2 -> UIntType(width),
-        2 -> SIntType(width),
-        1 -> Utils.BoolType
-      ))
+      tpe <- StateGen.liftG(
+        GenMonad.frequency(
+          2 -> UIntType(width),
+          2 -> SIntType(width),
+          1 -> Utils.BoolType
+        )
+      )
       expr <- ExprState[ExprGenParams].exprGen(tpe)
       outputPortRef <- tpe match {
         case UIntType(IntWidth(width)) if width == BigInt(1) => ExprGen.ReferenceGen.boolUIntGen[ExprGenParams, G].get
-        case UIntType(IntWidth(width)) => ExprGen.ReferenceGen.uintGen[ExprGenParams, G].get(width)
+        case UIntType(IntWidth(width))                       => ExprGen.ReferenceGen.uintGen[ExprGenParams, G].get(width)
         case SIntType(IntWidth(width)) if width == BigInt(1) => ExprGen.ReferenceGen.boolSIntGen[ExprGenParams, G].get
-        case SIntType(IntWidth(width)) => ExprGen.ReferenceGen.sintGen[ExprGenParams, G].get(width)
+        case SIntType(IntWidth(width))                       => ExprGen.ReferenceGen.sintGen[ExprGenParams, G].get(width)
       }
       unboundRefs <- StateGen.inspect { ExprState[ExprGenParams].unboundRefs }
     } yield {
@@ -88,7 +89,7 @@ sealed trait ExprGenParams {
         "foo",
         unboundRefs.flatMap {
           case ref if ref.name == outputPortRef.name => None
-          case ref => Some(Port(NoInfo, ref.name, Input, ref.tpe))
+          case ref                                   => Some(Port(NoInfo, ref.name, Input, ref.tpe))
         }.toSeq.sortBy(_.name) :+ outputPort,
         Connect(NoInfo, outputPortRef, expr)
       )
@@ -144,11 +145,12 @@ object ExprGenParams {
   }
 
   private case class ExprGenParamsImp(
-    maxDepth: Int,
-    maxWidth: Int,
-    generators: Map[ExprGen[_ <: Expression], Int],
+    maxDepth:                  Int,
+    maxWidth:                  Int,
+    generators:                Map[ExprGen[_ <: Expression], Int],
     protected val unboundRefs: Set[Reference],
-    protected val namespace: Namespace) extends ExprGenParams {
+    protected val namespace:   Namespace)
+      extends ExprGenParams {
 
     protected def decrementDepth: ExprGenParams = this.copy(maxDepth = maxDepth - 1)
     protected def incrementDepth: ExprGenParams = this.copy(maxDepth = maxDepth + 1)
@@ -158,8 +160,8 @@ object ExprGenParams {
   /** Constructs an [[ExprGenParams]] with the given parameters
     */
   def apply(
-    maxDepth: Int,
-    maxWidth: Int,
+    maxDepth:   Int,
+    maxWidth:   Int,
     generators: Map[ExprGen[_ <: Expression], Int]
   ): ExprGenParams = {
     require(maxWidth > 0, "maxWidth must be greater than zero")
@@ -176,28 +178,25 @@ object ExprGenParams {
 
   private def combineExprGens[S: ExprState, G[_]: GenMonad](
     exprGenerators: Seq[(Int, ExprGen[_ <: Expression])]
-  )(tpe: Type): StateGen[S, G, Option[Expression]] = {
-    val boolUIntStateGens = exprGenerators.flatMap {
-      case (freq, gen) => gen.boolUIntGen[S, G].map(freq -> _.widen[Expression])
+  )(tpe:            Type
+  ): StateGen[S, G, Option[Expression]] = {
+    val boolUIntStateGens = exprGenerators.flatMap { case (freq, gen) =>
+      gen.boolUIntGen[S, G].map(freq -> _.widen[Expression])
     }
-    val uintStateGenFns = exprGenerators.flatMap {
-      case (freq, gen) => gen.uintGen[S, G].map { fn =>
-        (width: BigInt) => freq -> fn(width).widen[Expression]
-      }
+    val uintStateGenFns = exprGenerators.flatMap { case (freq, gen) =>
+      gen.uintGen[S, G].map { fn => (width: BigInt) => freq -> fn(width).widen[Expression] }
     }
-    val boolSIntStateGens = exprGenerators.flatMap {
-      case (freq, gen) => gen.boolSIntGen[S, G].map(freq -> _.widen[Expression])
+    val boolSIntStateGens = exprGenerators.flatMap { case (freq, gen) =>
+      gen.boolSIntGen[S, G].map(freq -> _.widen[Expression])
     }
-    val sintStateGenFns = exprGenerators.flatMap {
-      case (freq, gen) => gen.sintGen[S, G].map { fn =>
-        (width: BigInt) => freq -> fn(width).widen[Expression]
-      }
+    val sintStateGenFns = exprGenerators.flatMap { case (freq, gen) =>
+      gen.sintGen[S, G].map { fn => (width: BigInt) => freq -> fn(width).widen[Expression] }
     }
     val stateGens: Seq[(Int, StateGen[S, G, Expression])] = tpe match {
-      case Utils.BoolType => boolUIntStateGens
-      case UIntType(IntWidth(width)) => uintStateGenFns.map(_(width))
+      case Utils.BoolType                                => boolUIntStateGens
+      case UIntType(IntWidth(width))                     => uintStateGenFns.map(_(width))
       case SIntType(IntWidth(width)) if width.toInt == 1 => boolSIntStateGens
-      case SIntType(IntWidth(width)) => sintStateGenFns.map(_(width))
+      case SIntType(IntWidth(width))                     => sintStateGenFns.map(_(width))
     }
     StateGen { (s: S) =>
       if (stateGens.isEmpty) {
@@ -220,32 +219,36 @@ object ExprGenParams {
       }
     }
     def unboundRefs(s: ExprGenParams): Set[Reference] = s.unboundRefs
-    def maxWidth(s: ExprGenParams): Int = s.maxWidth
+    def maxWidth(s:    ExprGenParams): Int = s.maxWidth
 
     def exprGen[G[_]: GenMonad](tpe: Type): StateGen[ExprGenParams, G, Expression] = {
       StateGen { (s: ExprGenParams) =>
-
-        val leafGen: Type => StateGen[ExprGenParams, G, Expression] = (tpe: Type) => combineExprGens(Seq(
-          1 -> ExprGen.LiteralGen,
-          1 -> ExprGen.ReferenceGen
-        ))(tpe).map(e => e.get) // should be safe because leaf generators are defined for all types
+        val leafGen: Type => StateGen[ExprGenParams, G, Expression] = (tpe: Type) =>
+          combineExprGens(
+            Seq(
+              1 -> ExprGen.LiteralGen,
+              1 -> ExprGen.ReferenceGen
+            )
+          )(tpe).map(e => e.get) // should be safe because leaf generators are defined for all types
 
         val branchGen: Type => StateGen[ExprGenParams, G, Expression] = (tpe: Type) => {
           val gens = s.generators.toSeq.map { case (gen, freq) => (freq, gen) }
           combineExprGens(gens)(tpe).flatMap {
-            case None => leafGen(tpe)
+            case None    => leafGen(tpe)
             case Some(e) => StateGen.pure(e)
           }
         }
 
         if (s.maxDepth > 0) {
           // for recrusive generators, decrement maxDepth before recursing then increment when finished
-          GenMonad.frequency(
-            5 -> (branchGen(_)),
-            1 -> (leafGen(_))
-          ).flatMap(_(tpe).run(s.decrementDepth).map {
-            case (ss, e) => ss.incrementDepth -> e
-          })
+          GenMonad
+            .frequency(
+              5 -> (branchGen(_)),
+              1 -> (leafGen(_))
+            )
+            .flatMap(_(tpe).run(s.decrementDepth).map { case (ss, e) =>
+              ss.incrementDepth -> e
+            })
         } else {
           leafGen(tpe).run(s)
         }
@@ -254,7 +257,8 @@ object ExprGenParams {
   }
 }
 
-abstract class SingleExpressionCircuitGenerator(val params: ExprGenParams) extends Generator[Circuit](classOf[Circuit]) {
+abstract class SingleExpressionCircuitGenerator(val params: ExprGenParams)
+    extends Generator[Circuit](classOf[Circuit]) {
   override def generate(random: SourceOfRandomness, status: GenerationStatus): Circuit = {
     implicit val r = random
     params.generateSingleExprCircuit[SourceOfRandomnessGen]()

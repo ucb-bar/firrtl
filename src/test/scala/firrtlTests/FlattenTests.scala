@@ -6,8 +6,7 @@ import firrtl.annotations.{Annotation, CircuitName, ComponentName, ModuleName}
 import firrtl.transforms.{Flatten, FlattenAnnotation, NoCircuitDedupAnnotation}
 import firrtl.testutils._
 
-/**
-  * Tests deep inline transformation
+/** Tests deep inline transformation
   */
 class FlattenTests extends LowTransformSpec {
   def transform = new Flatten

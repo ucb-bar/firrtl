@@ -197,9 +197,8 @@ class EliminateTargetPaths extends Transform with DependencyAPIMigration {
     duplicatedParents.foreach { parent =>
       val paths = iGraph.findInstancesInHierarchy(parent.value)
       val newTargets = paths.map { path =>
-        path.tail.foldLeft(topMod: IsModule) {
-          case (mod, wDefInst) =>
-            mod.instOf(wDefInst.name, wDefInst.module)
+        path.tail.foldLeft(topMod: IsModule) { case (mod, wDefInst) =>
+          mod.instOf(wDefInst.name, wDefInst.module)
         }
       }
       newTargets.foreach(addSelfRecord(_))
@@ -215,16 +214,15 @@ class EliminateTargetPaths extends Transform with DependencyAPIMigration {
     val (remainingAnnotations, targetsToEliminate, previouslyDeduped) =
       state.annotations.foldLeft(
         (Vector.empty[Annotation], Seq.empty[CompleteTarget], Map.empty[IsModule, (ModuleTarget, Double)])
-      ) {
-        case ((remainingAnnos, targets, dedupedResult), anno) =>
-          anno match {
-            case ResolvePaths(ts) =>
-              (remainingAnnos, ts ++ targets, dedupedResult)
-            case DedupedResult(orig, dups, idx) if dups.nonEmpty =>
-              (remainingAnnos, targets, dedupedResult ++ dups.map(_ -> (orig, idx)).toMap)
-            case other =>
-              (remainingAnnos :+ other, targets, dedupedResult)
-          }
+      ) { case ((remainingAnnos, targets, dedupedResult), anno) =>
+        anno match {
+          case ResolvePaths(ts) =>
+            (remainingAnnos, ts ++ targets, dedupedResult)
+          case DedupedResult(orig, dups, idx) if dups.nonEmpty =>
+            (remainingAnnos, targets, dedupedResult ++ dups.map(_ -> (orig, idx)).toMap)
+          case other =>
+            (remainingAnnos :+ other, targets, dedupedResult)
+        }
       }
 
     // Collect targets that are not local
@@ -240,13 +238,12 @@ class EliminateTargetPaths extends Transform with DependencyAPIMigration {
         case i: InstanceTarget  => i.asPath
         case r: ReferenceTarget => r.path
       }
-      path.foldLeft(t.module) {
-        case (module, (inst: Instance, of: OfModule)) =>
-          val childrenOpt = instanceOfModules.get(module)
-          if (childrenOpt.isEmpty || !childrenOpt.get.contains((inst, of))) {
-            targetsWithInvalidPaths += t
-          }
-          of.value
+      path.foldLeft(t.module) { case (module, (inst: Instance, of: OfModule)) =>
+        val childrenOpt = instanceOfModules.get(module)
+        if (childrenOpt.isEmpty || !childrenOpt.get.contains((inst, of))) {
+          targetsWithInvalidPaths += t
+        }
+        of.value
       }
     }
     if (targetsWithInvalidPaths.nonEmpty) {
@@ -267,9 +264,8 @@ class EliminateTargetPaths extends Transform with DependencyAPIMigration {
     val nonSingletonTargets = targets.foldRight(Seq.empty[IsMember]) {
       case (t: IsComponent, acc) if t.asPath.nonEmpty =>
         val origPath = t.asPath
-        val (singletonPrefix, rest) = origPath.partition {
-          case (_, OfModule(mod)) =>
-            isSingleInstMod(mod)
+        val (singletonPrefix, rest) = origPath.partition { case (_, OfModule(mod)) =>
+          isSingleInstMod(mod)
         }
 
         if (singletonPrefix.size > 0) {
@@ -324,18 +320,16 @@ class EliminateTargetPaths extends Transform with DependencyAPIMigration {
     // E.g. if previously ~Top|Top/foo:Foo was deduped to ~Top|Top/foo:Bar, then
     //  Eliminate target paths on ~Top|Top/foo:Bar should rename to ~Top|Top/foo:Foo, not
     //  ~Top|Top/foo:Bar___Top_foo
-    val newModuleNameMapping = previouslyDeduped.flatMap {
-      case (current: IsModule, (orig: ModuleTarget, idx)) =>
-        renameMap.get(current).collect { case Seq(ModuleTarget(_, m)) => m -> orig.name }
+    val newModuleNameMapping = previouslyDeduped.flatMap { case (current: IsModule, (orig: ModuleTarget, idx)) =>
+      renameMap.get(current).collect { case Seq(ModuleTarget(_, m)) => m -> orig.name }
     }
 
     val renamedCircuit = renameModules(newCircuitGC, newModuleNameMapping, renamedModuleMap)
 
     val reorderedCircuit = reorderModules(
       renamedCircuit,
-      previouslyDeduped.map {
-        case (current: IsModule, (orig: ModuleTarget, idx)) =>
-          orig.name -> idx
+      previouslyDeduped.map { case (current: IsModule, (orig: ModuleTarget, idx)) =>
+        orig.name -> idx
       }
     )
 

@@ -149,53 +149,52 @@ object ExpandWhens extends Pass {
 
         // Process combined maps because we only want to create 1 mux for each node
         //   present in the conseq and/or alt
-        val memos = (conseqNetlist ++ altNetlist).map {
-          case (lvalue, _) =>
-            // Defaults in netlist get priority over those in defaults
-            val default = netlist.get(lvalue) match {
-              case Some(v) => Some(v)
-              case None    => getDefault(lvalue, defaults)
-            }
-            // info0 and info1 correspond to Mux infos, use info0 only if ValidIf
-            val (res, info0, info1) = default match {
-              case Some(defaultValue) =>
-                val (tinfo, trueValue) = unwrap(conseqNetlist.getOrElse(lvalue, defaultValue))
-                val (finfo, falseValue) = unwrap(altNetlist.getOrElse(lvalue, defaultValue))
-                (trueValue, falseValue) match {
-                  case (WInvalid, WInvalid) => (WInvalid, NoInfo, NoInfo)
-                  case (WInvalid, fv)       => (ValidIf(NOT(sx.pred), fv, fv.tpe), finfo, NoInfo)
-                  case (tv, WInvalid)       => (ValidIf(sx.pred, tv, tv.tpe), tinfo, NoInfo)
-                  case (tv, fv)             => (Mux(sx.pred, tv, fv, mux_type_and_widths(tv, fv)), tinfo, finfo)
-                }
-              case None =>
-                // Since not in netlist, lvalue must be declared in EXACTLY one of conseq or alt
-                (conseqNetlist.getOrElse(lvalue, altNetlist(lvalue)), NoInfo, NoInfo)
-            }
+        val memos = (conseqNetlist ++ altNetlist).map { case (lvalue, _) =>
+          // Defaults in netlist get priority over those in defaults
+          val default = netlist.get(lvalue) match {
+            case Some(v) => Some(v)
+            case None    => getDefault(lvalue, defaults)
+          }
+          // info0 and info1 correspond to Mux infos, use info0 only if ValidIf
+          val (res, info0, info1) = default match {
+            case Some(defaultValue) =>
+              val (tinfo, trueValue) = unwrap(conseqNetlist.getOrElse(lvalue, defaultValue))
+              val (finfo, falseValue) = unwrap(altNetlist.getOrElse(lvalue, defaultValue))
+              (trueValue, falseValue) match {
+                case (WInvalid, WInvalid) => (WInvalid, NoInfo, NoInfo)
+                case (WInvalid, fv)       => (ValidIf(NOT(sx.pred), fv, fv.tpe), finfo, NoInfo)
+                case (tv, WInvalid)       => (ValidIf(sx.pred, tv, tv.tpe), tinfo, NoInfo)
+                case (tv, fv)             => (Mux(sx.pred, tv, fv, mux_type_and_widths(tv, fv)), tinfo, finfo)
+              }
+            case None =>
+              // Since not in netlist, lvalue must be declared in EXACTLY one of conseq or alt
+              (conseqNetlist.getOrElse(lvalue, altNetlist(lvalue)), NoInfo, NoInfo)
+          }
 
-            res match {
-              // Don't create a node to hold mux trees with void values
-              // "Idiomatic" emission of these muxes isn't a concern because they represent bad code (latches)
-              case e if containsVoid(e) =>
-                netlist(lvalue) = e
-                memoizedVoid += e // remember that this was void
-                EmptyStmt
-              case _: ValidIf | _: Mux | _: DoPrim =>
-                nodes.get(res) match {
-                  case Some(name) =>
-                    netlist(lvalue) = WRef(name, res.tpe, NodeKind, SourceFlow)
-                    EmptyStmt
-                  case None =>
-                    val name = namespace.newTemp
-                    nodes(res) = name
-                    netlist(lvalue) = WRef(name, res.tpe, NodeKind, SourceFlow)
-                    // Use MultiInfo constructor to preserve NoInfos
-                    val info = new MultiInfo(List(sx.info, info0, info1))
-                    DefNode(info, name, res)
-                }
-              case _ =>
-                netlist(lvalue) = res
-                EmptyStmt
-            }
+          res match {
+            // Don't create a node to hold mux trees with void values
+            // "Idiomatic" emission of these muxes isn't a concern because they represent bad code (latches)
+            case e if containsVoid(e) =>
+              netlist(lvalue) = e
+              memoizedVoid += e // remember that this was void
+              EmptyStmt
+            case _: ValidIf | _: Mux | _: DoPrim =>
+              nodes.get(res) match {
+                case Some(name) =>
+                  netlist(lvalue) = WRef(name, res.tpe, NodeKind, SourceFlow)
+                  EmptyStmt
+                case None =>
+                  val name = namespace.newTemp
+                  nodes(res) = name
+                  netlist(lvalue) = WRef(name, res.tpe, NodeKind, SourceFlow)
+                  // Use MultiInfo constructor to preserve NoInfos
+                  val info = new MultiInfo(List(sx.info, info0, info1))
+                  DefNode(info, name, res)
+              }
+            case _ =>
+              netlist(lvalue) = res
+              EmptyStmt
+          }
         }
         Block(Seq(conseqStmt, altStmt) ++ memos)
       case block: Block => block.map(expandWhens(netlist, defaults, p))
@@ -203,9 +202,8 @@ object ExpandWhens extends Pass {
     }
     val netlist = new Netlist
     // Add ports to netlist
-    netlist ++= (m.ports.flatMap {
-      case Port(_, name, dir, tpe) =>
-        getSinkRefs(name, tpe, to_flow(dir)).map(ref => we(ref) -> WVoid)
+    netlist ++= (m.ports.flatMap { case Port(_, name, dir, tpe) =>
+      getSinkRefs(name, tpe, to_flow(dir)).map(ref => we(ref) -> WVoid)
     })
     // Do traversal and construct mutable datastructures
     val bodyx = expandWhens(netlist, Seq(netlist), one)(m.body)
@@ -221,16 +219,15 @@ object ExpandWhens extends Pass {
   /** Returns all references to all sink leaf subcomponents of a reference */
   private def getSinkRefs(n: String, t: Type, g: Flow): Seq[Expression] = {
     val exps = create_exps(WRef(n, t, ExpKind, g))
-    exps.flatMap {
-      case exp =>
-        exp.tpe match {
-          case AnalogType(w) => None
-          case _ =>
-            flow(exp) match {
-              case (DuplexFlow | SinkFlow) => Some(exp)
-              case _                       => None
-            }
-        }
+    exps.flatMap { case exp =>
+      exp.tpe match {
+        case AnalogType(w) => None
+        case _ =>
+          flow(exp) match {
+            case (DuplexFlow | SinkFlow) => Some(exp)
+            case _                       => None
+          }
+      }
     }
   }
 

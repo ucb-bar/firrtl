@@ -79,20 +79,19 @@ class InlineInstances extends Transform with DependencyAPIMigration with Registe
   )
 
   private def collectAnns(circuit: Circuit, anns: Iterable[Annotation]): (Set[ModuleName], Set[ComponentName]) =
-    anns.foldLeft((Set.empty[ModuleName], Set.empty[ComponentName])) {
-      case ((modNames, instNames), ann) =>
-        ann match {
-          case InlineAnnotation(CircuitName(c)) =>
-            (
-              circuit.modules.collect {
-                case Module(_, name, _, _) if name != circuit.main => ModuleName(name, CircuitName(c))
-              }.toSet,
-              instNames
-            )
-          case InlineAnnotation(ModuleName(mod, cir))    => (modNames + ModuleName(mod, cir), instNames)
-          case InlineAnnotation(ComponentName(com, mod)) => (modNames, instNames + ComponentName(com, mod))
-          case _                                         => (modNames, instNames)
-        }
+    anns.foldLeft((Set.empty[ModuleName], Set.empty[ComponentName])) { case ((modNames, instNames), ann) =>
+      ann match {
+        case InlineAnnotation(CircuitName(c)) =>
+          (
+            circuit.modules.collect {
+              case Module(_, name, _, _) if name != circuit.main => ModuleName(name, CircuitName(c))
+            }.toSet,
+            instNames
+          )
+        case InlineAnnotation(ModuleName(mod, cir))    => (modNames + ModuleName(mod, cir), instNames)
+        case InlineAnnotation(ComponentName(com, mod)) => (modNames, instNames + ComponentName(com, mod))
+        case _                                         => (modNames, instNames)
+      }
     }
 
   def execute(state: CircuitState): CircuitState = {
@@ -241,19 +240,16 @@ class InlineInstances extends Transform with DependencyAPIMigration with Registe
     val (renamesMap, renamesSeq) = {
       val mutableDiGraph = new MutableDiGraph[(OfModule, Instance)]
       // compute instance graph
-      instMaps.foreach {
-        case (grandParentOfMod, parents) =>
-          parents.foreach {
-            case (parentInst, parentOfMod) =>
-              val from = grandParentOfMod -> parentInst
-              mutableDiGraph.addVertex(from)
-              instMaps(parentOfMod).foreach {
-                case (childInst, _) =>
-                  val to = parentOfMod -> childInst
-                  mutableDiGraph.addVertex(to)
-                  mutableDiGraph.addEdge(from, to)
-              }
+      instMaps.foreach { case (grandParentOfMod, parents) =>
+        parents.foreach { case (parentInst, parentOfMod) =>
+          val from = grandParentOfMod -> parentInst
+          mutableDiGraph.addVertex(from)
+          instMaps(parentOfMod).foreach { case (childInst, _) =>
+            val to = parentOfMod -> childInst
+            mutableDiGraph.addVertex(to)
+            mutableDiGraph.addEdge(from, to)
           }
+        }
       }
 
       val diGraph = DiGraph(mutableDiGraph)

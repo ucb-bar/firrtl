@@ -181,14 +181,14 @@ class InlineBooleanExpressions extends Transform with DependencyAPIMigration {
           case anno: HasDontTouches => anno.dontTouches
           case o => Nil
         }
-        val dontTouches: Seq[(OfModule, Ref)] = refTargets.map {
-          case r => Target.referringModule(r).module.OfModule -> r.ref.Ref
+        val dontTouches: Seq[(OfModule, Ref)] = refTargets.map { case r =>
+          Target.referringModule(r).module.OfModule -> r.ref.Ref
         }
         dontTouches.groupBy(_._1).mapValues(_.map(_._2).toSet).toMap
       }
 
-      val maxInlineCount = state.annotations.collectFirst {
-        case InlineBooleanExpressionsMax(max) => max
+      val maxInlineCount = state.annotations.collectFirst { case InlineBooleanExpressionsMax(max) =>
+        max
       }.getOrElse(InlineBooleanExpressions.defaultMax)
 
       val modulesx = state.circuit.modules.map { m =>

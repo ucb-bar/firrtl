@@ -104,12 +104,12 @@ class MorphismSpec extends AnyFlatSpec with Matchers {
     )
 
     def apply(a: CircuitState): CircuitState = {
-      val ax = (setup ++ f ++ g).foldLeft(a) {
-        case (state, transform) => transform.runTransform(state)
+      val ax = (setup ++ f ++ g).foldLeft(a) { case (state, transform) =>
+        transform.runTransform(state)
       }
 
-      cleanup.foldLeft(ax) {
-        case (state, transform) => transform.transform(state)
+      cleanup.foldLeft(ax) { case (state, transform) =>
+        transform.transform(state)
       }
     }
 
@@ -130,8 +130,8 @@ class MorphismSpec extends AnyFlatSpec with Matchers {
       }
 
       info(s"Output Annotation History:\n")
-      outputState.annotations.collect {
-        case a: AnAnnotation => info(a.serialize)
+      outputState.annotations.collect { case a: AnAnnotation =>
+        info(a.serialize)
       }
 
       val inputAnnotations = state.annotations.filter {
@@ -143,13 +143,13 @@ class MorphismSpec extends AnyFlatSpec with Matchers {
         outputState.annotations.size should be(inputAnnotations.size)
         info("the number of annotations is the same")
 
-        outputState.annotations.zip(inputAnnotations).collect {
-          case (a: AnAnnotation, b: AnAnnotation) => a.target should be(b.target)
+        outputState.annotations.zip(inputAnnotations).collect { case (a: AnAnnotation, b: AnAnnotation) =>
+          a.target should be(b.target)
         }
         info("each annotation is the same")
       } else {
-        outputState.annotations.zip(finalAnnotations.get).collect {
-          case (a: AnAnnotation, b: AnAnnotation) => a.target should be(b.target)
+        outputState.annotations.zip(finalAnnotations.get).collect { case (a: AnAnnotation, b: AnAnnotation) =>
+          a.target should be(b.target)
         }
 
         outputState.annotations.size should be(finalAnnotations.get.size)
@@ -177,20 +177,20 @@ class MorphismSpec extends AnyFlatSpec with Matchers {
 
     def apply(a: CircuitState): (CircuitState, CircuitState) = {
 
-      val once = (setup ++ f).foldLeft(a) {
-        case (state, transform) => transform.runTransform(state)
+      val once = (setup ++ f).foldLeft(a) { case (state, transform) =>
+        transform.runTransform(state)
       }
 
-      val twice = f.foldLeft(once) {
-        case (state, transform) => transform.runTransform(state)
+      val twice = f.foldLeft(once) { case (state, transform) =>
+        transform.runTransform(state)
       }
 
-      val onceClean = cleanup.foldLeft(once) {
-        case (state, transform) => transform.transform(state)
+      val onceClean = cleanup.foldLeft(once) { case (state, transform) =>
+        transform.transform(state)
       }
 
-      val twiceClean = cleanup.foldLeft(twice) {
-        case (state, transform) => transform.transform(state)
+      val twiceClean = cleanup.foldLeft(twice) { case (state, transform) =>
+        transform.transform(state)
       }
 
       (onceClean, twiceClean)
@@ -205,8 +205,8 @@ class MorphismSpec extends AnyFlatSpec with Matchers {
       twoApplications.circuit.serialize should be(oneApplication.circuit.serialize)
 
       info("each annotation is the same after a second application")
-      twoApplications.annotations.zip(oneApplication.annotations).foreach {
-        case (a, b) => a should be(b)
+      twoApplications.annotations.zip(oneApplication.annotations).foreach { case (a, b) =>
+        a should be(b)
       }
 
       info("the number of annotations after a second application is the same")

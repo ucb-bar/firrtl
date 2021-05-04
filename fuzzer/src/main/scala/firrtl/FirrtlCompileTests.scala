@@ -3,7 +3,7 @@
 package firrtl.fuzzer
 
 import com.pholser.junit.quickcheck.From
-import com.pholser.junit.quickcheck.generator.{Generator, GenerationStatus}
+import com.pholser.junit.quickcheck.generator.{GenerationStatus, Generator}
 import com.pholser.junit.quickcheck.random.SourceOfRandomness
 
 import firrtl.{ChirrtlForm, CircuitState, LowFirrtlCompiler}
@@ -33,22 +33,23 @@ trait SourceOfRandomnessGen[A] {
 }
 
 object SourceOfRandomnessGen {
-  implicit def sourceOfRandomnessGenGenMonadInstance(implicit r: SourceOfRandomness): GenMonad[SourceOfRandomnessGen] = new GenMonad[SourceOfRandomnessGen] {
-    import scala.collection.JavaConverters.seqAsJavaListConverter
-    type G[T] = SourceOfRandomnessGen[T]
-    def flatMap[A, B](a: G[A])(f: A => G[B]): G[B] = a.flatMap(f)
-    def map[A, B](a: G[A])(f: A => B): G[B] = a.map(f)
-    def choose(min: Int, max: Int): G[Int] = SourceOfRandomnessGen {
-      r.nextLong(min, max).toInt // use r.nextLong instead of r.nextInt because r.nextInt is exclusive of max
+  implicit def sourceOfRandomnessGenGenMonadInstance(implicit r: SourceOfRandomness): GenMonad[SourceOfRandomnessGen] =
+    new GenMonad[SourceOfRandomnessGen] {
+      import scala.collection.JavaConverters.seqAsJavaListConverter
+      type G[T] = SourceOfRandomnessGen[T]
+      def flatMap[A, B](a: G[A])(f:  A => G[B]): G[B] = a.flatMap(f)
+      def map[A, B](a:     G[A])(f:  A => B): G[B] = a.map(f)
+      def choose(min:      Int, max: Int): G[Int] = SourceOfRandomnessGen {
+        r.nextLong(min, max).toInt // use r.nextLong instead of r.nextInt because r.nextInt is exclusive of max
+      }
+      def oneOf[T](items: T*): G[T] = {
+        val arr = seqAsJavaListConverter(items)
+        const(arr.asJava).map(r.choose(_))
+      }
+      def const[T](c:          T):    G[T] = SourceOfRandomnessGen(c)
+      def widen[A, B >: A](ga: G[A]): G[B] = ga.widen[B]
+      def generate[A](ga:      G[A]): A = ga.apply()
     }
-    def oneOf[T](items: T*): G[T] = {
-      val arr = seqAsJavaListConverter(items)
-      const(arr.asJava).map(r.choose(_))
-    }
-    def const[T](c: T): G[T] = SourceOfRandomnessGen(c)
-    def widen[A, B >: A](ga: G[A]): G[B] = ga.widen[B]
-    def generate[A](ga: G[A]): A = ga.apply()
-  }
 
   def apply[T](f: => T): SourceOfRandomnessGen[T] = new SourceOfRandomnessGen[T] {
     def apply(): T = f
@@ -56,13 +57,14 @@ object SourceOfRandomnessGen {
 }
 
 import ExprGen._
-class FirrtlCompileCircuitGenerator extends SingleExpressionCircuitGenerator (
-  ExprGenParams(
-    maxDepth = 50,
-    maxWidth = 31,
-    generators = ExprGenParams.defaultGenerators
-  )
-)
+class FirrtlCompileCircuitGenerator
+    extends SingleExpressionCircuitGenerator(
+      ExprGenParams(
+        maxDepth = 50,
+        maxWidth = 31,
+        generators = ExprGenParams.defaultGenerators
+      )
+    )
 
 @RunWith(classOf[JQF])
 class FirrtlCompileTests {
@@ -90,7 +92,7 @@ class FirrtlCompileTests {
     } catch {
       case e: firrtl.CustomTransformException =>
         Assert.assertTrue(message(c.circuit, e.cause), false)
-      case any : Throwable =>
+      case any: Throwable =>
         Assert.assertTrue(message(c.circuit, any), false)
     }
   }

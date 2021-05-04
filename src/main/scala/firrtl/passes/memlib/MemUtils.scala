@@ -32,9 +32,8 @@ object toBitMask {
           hiermask(WSubIndex(mask, i, mt.tpe, UnknownFlow), dt.tpe)
         })
       case (mt: BundleType, dt: BundleType) =>
-        seqCat((mt.fields.zip(dt.fields)).map {
-          case (mf, df) =>
-            hiermask(WSubField(mask, mf.name, mf.tpe, UnknownFlow), df.tpe)
+        seqCat((mt.fields.zip(dt.fields)).map { case (mf, df) =>
+          hiermask(WSubField(mask, mf.name, mf.tpe, UnknownFlow), df.tpe)
         })
       case (UIntType(width), dt: GroundType) if width == IntWidth(BigInt(1)) =>
         seqCat(List.fill(bitWidth(dt).intValue)(mask))

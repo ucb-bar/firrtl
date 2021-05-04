@@ -61,8 +61,7 @@ class PropagatePresetAnnotations extends Transform with DependencyAPIMigration {
 
   private val toCleanUp = new TargetSet()
 
-  /**
-    * Logic of the propagation, divided in two main phases:
+  /** Logic of the propagation, divided in two main phases:
     * 1./ Walk all the Circuit looking for annotated AsyncResets :
     *     - Store all Annotated AsyncReset reference
     *     - Build all AsyncReset Trees (whether annotated or not)
@@ -290,8 +289,7 @@ class PropagatePresetAnnotations extends Transform with DependencyAPIMigration {
       })
     }
 
-    /**
-      * Walk AsyncReset Trees with all Annotated AsyncReset as entry points
+    /** Walk AsyncReset Trees with all Annotated AsyncReset as entry points
       * Annotate all leaf registers and intermediate wires, nodes, connectors along the way
       */
     def annotateAsyncSet(set: TargetSet): Unit = {
@@ -315,8 +313,7 @@ class PropagatePresetAnnotations extends Transform with DependencyAPIMigration {
    * WALK II FUNCTIONS
    */
 
-  /**
-    * Clean-up useless reset tree (not relying on DCE)
+  /** Clean-up useless reset tree (not relying on DCE)
     * Disconnect preset registers from their reset tree
     */
   private def cleanUpPresetTree(circuit: Circuit, annos: AnnotationSeq): Circuit = {

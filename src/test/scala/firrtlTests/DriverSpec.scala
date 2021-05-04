@@ -197,8 +197,7 @@ class DriverSpec extends AnyFreeSpec with Matchers with BackendCompilationUtilit
 
         val firrtlOptions = optionsManager.firrtlOptions
         firrtlOptions.annotations.length should be(1)
-        firrtlOptions.annotations.head should matchPattern {
-          case ReplSeqMemAnnotation("infile1", "outfile1") =>
+        firrtlOptions.annotations.head should matchPattern { case ReplSeqMemAnnotation("infile1", "outfile1") =>
         }
       }
     }
@@ -268,25 +267,24 @@ class DriverSpec extends AnyFreeSpec with Matchers with BackendCompilationUtilit
         "verilog" -> "./Foo.v",
         "mverilog" -> "./Foo.v",
         "sverilog" -> "./Foo.sv"
-      ).foreach {
-        case (compilerName, expectedOutputFileName) =>
-          info(s"$compilerName -> $expectedOutputFileName")
-          val manager = new ExecutionOptionsManager("test") with HasFirrtlOptions {
-            commonOptions = CommonOptions(topName = "Foo")
-            firrtlOptions = FirrtlExecutionOptions(firrtlSource = Some(input), compilerName = compilerName)
-          }
+      ).foreach { case (compilerName, expectedOutputFileName) =>
+        info(s"$compilerName -> $expectedOutputFileName")
+        val manager = new ExecutionOptionsManager("test") with HasFirrtlOptions {
+          commonOptions = CommonOptions(topName = "Foo")
+          firrtlOptions = FirrtlExecutionOptions(firrtlSource = Some(input), compilerName = compilerName)
+        }
 
-          firrtl.Driver.execute(manager) match {
-            case success: FirrtlExecutionSuccess =>
-              success.emitted.size should not be (0)
-              success.circuitState.annotations.length should be > (0)
-            case a: FirrtlExecutionFailure =>
-              fail(s"Got a FirrtlExecutionFailure! Expected FirrtlExecutionSuccess. Full message:\n${a.message}")
-          }
+        firrtl.Driver.execute(manager) match {
+          case success: FirrtlExecutionSuccess =>
+            success.emitted.size should not be (0)
+            success.circuitState.annotations.length should be > (0)
+          case a: FirrtlExecutionFailure =>
+            fail(s"Got a FirrtlExecutionFailure! Expected FirrtlExecutionSuccess. Full message:\n${a.message}")
+        }
 
-          val file = new File(expectedOutputFileName)
-          file.exists() should be(true)
-          file.delete()
+        val file = new File(expectedOutputFileName)
+        file.exists() should be(true)
+        file.delete()
       }
     }
     "To a single file per module if OneFilePerModule is specified" in {
@@ -298,30 +296,29 @@ class DriverSpec extends AnyFreeSpec with Matchers with BackendCompilationUtilit
         "verilog" -> Seq("./Top.v", "./Child.v"),
         "mverilog" -> Seq("./Top.v", "./Child.v"),
         "sverilog" -> Seq("./Top.sv", "./Child.sv")
-      ).foreach {
-        case (compilerName, expectedOutputFileNames) =>
-          info(s"$compilerName -> $expectedOutputFileNames")
-          val manager = new ExecutionOptionsManager("test") with HasFirrtlOptions {
-            firrtlOptions = FirrtlExecutionOptions(
-              firrtlSource = Some(input),
-              compilerName = compilerName,
-              emitOneFilePerModule = true
-            )
-          }
+      ).foreach { case (compilerName, expectedOutputFileNames) =>
+        info(s"$compilerName -> $expectedOutputFileNames")
+        val manager = new ExecutionOptionsManager("test") with HasFirrtlOptions {
+          firrtlOptions = FirrtlExecutionOptions(
+            firrtlSource = Some(input),
+            compilerName = compilerName,
+            emitOneFilePerModule = true
+          )
+        }
 
-          firrtl.Driver.execute(manager) match {
-            case success: FirrtlExecutionSuccess =>
-              success.emitted.size should not be (0)
-              success.circuitState.annotations.length should be > (0)
-            case failure: FirrtlExecutionFailure =>
-              fail(s"Got a FirrtlExecutionFailure! Expected FirrtlExecutionSuccess. Full message:\n${failure.message}")
-          }
+        firrtl.Driver.execute(manager) match {
+          case success: FirrtlExecutionSuccess =>
+            success.emitted.size should not be (0)
+            success.circuitState.annotations.length should be > (0)
+          case failure: FirrtlExecutionFailure =>
+            fail(s"Got a FirrtlExecutionFailure! Expected FirrtlExecutionSuccess. Full message:\n${failure.message}")
+        }
 
-          for (name <- expectedOutputFileNames) {
-            val file = new File(name)
-            file.exists() should be(true)
-            file.delete()
-          }
+        for (name <- expectedOutputFileNames) {
+          val file = new File(name)
+          file.exists() should be(true)
+          file.delete()
+        }
       }
     }
   }

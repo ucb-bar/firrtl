@@ -15,35 +15,35 @@ object FirrtlCompileProperties extends Properties("FirrtlCompile") {
         maxDepth = size / 3,
         maxWidth = math.min(size + 1, CheckWidths.MaxWidth),
         generators = Map(
-           AddDoPrimGen -> 1,
-           SubDoPrimGen -> 1,
-           MulDoPrimGen -> 1,
-           DivDoPrimGen -> 1,
-           LtDoPrimGen -> 1,
-           LeqDoPrimGen -> 1,
-           GtDoPrimGen -> 1,
-           GeqDoPrimGen -> 1,
-           EqDoPrimGen -> 1,
-           NeqDoPrimGen -> 1,
-           PadDoPrimGen -> 1,
-           ShlDoPrimGen -> 1,
-           ShrDoPrimGen -> 1,
-           DshlDoPrimGen -> 1,
-           CvtDoPrimGen -> 1,
-           NegDoPrimGen -> 1,
-           NotDoPrimGen -> 1,
-           AndDoPrimGen -> 1,
-           OrDoPrimGen -> 1,
-           XorDoPrimGen -> 1,
-           AndrDoPrimGen -> 1,
-           OrrDoPrimGen -> 1,
-           XorrDoPrimGen -> 1,
-           CatDoPrimGen -> 1,
-           BitsDoPrimGen -> 1,
-           HeadDoPrimGen -> 1,
-           TailDoPrimGen -> 1,
-           AsUIntDoPrimGen -> 1,
-           AsSIntDoPrimGen -> 1,
+          AddDoPrimGen -> 1,
+          SubDoPrimGen -> 1,
+          MulDoPrimGen -> 1,
+          DivDoPrimGen -> 1,
+          LtDoPrimGen -> 1,
+          LeqDoPrimGen -> 1,
+          GtDoPrimGen -> 1,
+          GeqDoPrimGen -> 1,
+          EqDoPrimGen -> 1,
+          NeqDoPrimGen -> 1,
+          PadDoPrimGen -> 1,
+          ShlDoPrimGen -> 1,
+          ShrDoPrimGen -> 1,
+          DshlDoPrimGen -> 1,
+          CvtDoPrimGen -> 1,
+          NegDoPrimGen -> 1,
+          NotDoPrimGen -> 1,
+          AndDoPrimGen -> 1,
+          OrDoPrimGen -> 1,
+          XorDoPrimGen -> 1,
+          AndrDoPrimGen -> 1,
+          OrrDoPrimGen -> 1,
+          XorrDoPrimGen -> 1,
+          CatDoPrimGen -> 1,
+          BitsDoPrimGen -> 1,
+          HeadDoPrimGen -> 1,
+          TailDoPrimGen -> 1,
+          AsUIntDoPrimGen -> 1,
+          AsSIntDoPrimGen -> 1
         )
       )
       params.generateSingleExprCircuit[Gen]()
@@ -57,8 +57,8 @@ object FirrtlCompileProperties extends Properties("FirrtlCompile") {
         val res = compiler.compile(state, Seq())
         true
       } catch {
-        case e: CustomTransformException => false
-        case any : Throwable => false
+        case e:   CustomTransformException => false
+        case any: Throwable                => false
       }
     }
   }
