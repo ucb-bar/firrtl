@@ -213,6 +213,7 @@ private[firrtl] object Transform {
 
     logger.info(s"Form: ${after.form}")
     logger.trace(s"Annotations:")
+<<<<<<< HEAD
     logger.trace {
       JsonProtocol.serializeTry(remappedAnnotations).recoverWith {
         case NonFatal(e) =>
@@ -221,6 +222,9 @@ private[firrtl] object Transform {
           Try(msg)
       }.get
     }
+=======
+    logger.trace(JsonProtocol.serializeRecover(remappedAnnotations))
+>>>>>>> c2d72fd8... Add JsonProtocol.serializeRecover (#2227)
 
     logger.trace(s"Circuit:\n${after.circuit.serialize}")
     logger.info(s"======== Finished Transform $name ========\n")

@@ -3,11 +3,15 @@
 package firrtlTests.annotationTests
 
 import firrtl._
-import firrtl.annotations.{JsonProtocol, NoTargetAnnotation, UnserializableAnnotationException}
+import firrtl.annotations._
 import firrtl.ir._
 import firrtl.options.Dependency
+<<<<<<< HEAD
 import _root_.logger.{Logger, LogLevel, LogLevelAnnotation}
 import org.scalatest.{FlatSpec, Matchers}
+=======
+import firrtl.transforms.DontTouchAnnotation
+>>>>>>> c2d72fd8... Add JsonProtocol.serializeRecover (#2227)
 import scala.util.Failure
 import org.scalatest.Inside._
 
@@ -75,5 +79,14 @@ class JsonProtocolSpec extends FlatSpec with Matchers {
         // From json4s Exception
         e.getMessage should include("Classes defined in method bodies are not supported")
     }
+  }
+  "JsonProtocol.serializeRecover" should "emit even annotations that cannot be serialized" in {
+    case class MyAnno(x: Int) extends NoTargetAnnotation
+    val target = CircuitTarget("Top").module("Foo").ref("x")
+    val annos = MyAnno(3) :: DontTouchAnnotation(target) :: Nil
+    val res = JsonProtocol.serializeRecover(annos)
+    res should include(""""class":"firrtl.annotations.UnserializeableAnnotation",""")
+    res should include(""""error":"Classes defined in method bodies are not supported.",""")
+    res should include(""""content":"MyAnno(3)"""")
   }
 }
