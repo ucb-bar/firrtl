@@ -25,6 +25,12 @@ sealed trait Target extends Named {
   /** @return Module name, if it exists */
   def moduleOpt: Option[String]
 
+  /** @return true if this is the top-module, false if this cannot be determined */
+  def isTop: Boolean = (circuitOpt, moduleOpt) match {
+    case (Some(a), Some(b)) => a == b
+    case _                  => false
+  }
+
   /** @return [[Target]] tokens */
   def tokens: Seq[TargetToken]
 
@@ -113,9 +119,13 @@ sealed trait Target extends Named {
 
 object Target {
   def asTarget(m: ModuleTarget)(e: Expression): ReferenceTarget = e match {
-    case r: ir.Reference => m.ref(r.name)
-    case s: ir.SubIndex  => asTarget(m)(s.expr).index(s.value)
-    case s: ir.SubField  => asTarget(m)(s.expr).field(s.name)
+    case r: ir.Reference =>
+      val tokens = toTargetTokens(r.name)
+      (tokens.head, tokens.tail) match {
+        case (car: Ref, cdr) => m.ref(car.value).copy(component=cdr)
+      }
+    case s: ir.SubIndex => asTarget(m)(s.expr).index(s.value)
+    case s: ir.SubField => asTarget(m)(s.expr).field(s.name)
     case s: ir.SubAccess => asTarget(m)(s.expr).field("@" + s.index.serialize)
     case d: DoPrim       => m.ref("@" + d.serialize)
     case d: Mux          => m.ref("@" + d.serialize)

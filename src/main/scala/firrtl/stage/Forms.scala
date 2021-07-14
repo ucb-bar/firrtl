@@ -74,6 +74,7 @@ object Forms {
 
   val LowForm: Seq[TransformDependency] = MidForm ++
     Seq(
+      Dependency[firrtl.transforms.CollapseVectors],
       Dependency(passes.LowerTypes),
       Dependency(passes.Legalize),
       Dependency(firrtl.transforms.RemoveReset),

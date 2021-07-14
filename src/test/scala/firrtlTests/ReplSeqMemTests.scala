@@ -77,8 +77,8 @@ class ReplSeqMemSpec extends SimpleTransformSpec {
 
   "ReplSeqMem" should "generate blackbox wrappers for mems of bundle type" in {
     val input = """
-circuit Top : 
-  module Top : 
+circuit Top :
+  module Top :
     input clock : Clock
     input reset : UInt<1>
     input head_ptr : UInt<5>
@@ -120,9 +120,9 @@ circuit Top :
 
     reg p_valid : UInt<1>, clock
     reg p_address : UInt<5>, clock
-    smem mem : UInt<8>[8][32] 
-    when hsel : 
-      when p_valid : 
+    smem mem : UInt<8>[8][32]
+    when hsel :
+      when p_valid :
         write mport T_155 = mem[p_address], clock
 """.stripMargin
     val mems = Set(MemConf("mem_ext", 32, 64, Map(MaskedWritePort -> 1), Some(64)))
@@ -140,20 +140,20 @@ circuit Top :
 
   "ReplSeqMem" should "not fail with FixedPoint types " in {
     val input = """
-circuit CustomMemory : 
-  module CustomMemory : 
+circuit CustomMemory :
+  module CustomMemory :
     input clock : Clock
     input reset : UInt<1>
     output io : {flip rClk : Clock, flip rAddr : UInt<3>, dO : Fixed<16><<8>>, flip wClk : Clock, flip wAddr : UInt<3>, flip wEn : UInt<1>, flip dI : Fixed<16><<8>>}
-    
+
     io is invalid
-    smem mem : Fixed<16><<8>>[7] 
+    smem mem : Fixed<16><<8>>[7]
     read mport _T_17 = mem[io.rAddr], clock
-    io.dO <= _T_17 
-    when io.wEn : 
+    io.dO <= _T_17
+    when io.wEn :
       write mport _T_18 = mem[io.wAddr], clock
       _T_18 <= io.dI
-      skip 
+      skip
 """.stripMargin
     val mems = Set(MemConf("mem_ext", 7, 16, Map(WritePort -> 1, ReadPort -> 1), None))
     val confLoc = "ReplSeqMemTests.confTEMP"
@@ -170,20 +170,20 @@ circuit CustomMemory :
 
   "ReplSeqMem" should "not fail with Signed types " in {
     val input = """
-circuit CustomMemory : 
-  module CustomMemory : 
+circuit CustomMemory :
+  module CustomMemory :
     input clock : Clock
     input reset : UInt<1>
     output io : {flip rClk : Clock, flip rAddr : UInt<3>, dO : SInt<16>, flip wClk : Clock, flip wAddr : UInt<3>, flip wEn : UInt<1>, flip dI : SInt<16>}
-    
+
     io is invalid
-    smem mem : SInt<16>[7] 
+    smem mem : SInt<16>[7]
     read mport _T_17 = mem[io.rAddr], clock
-    io.dO <= _T_17 
-    when io.wEn : 
+    io.dO <= _T_17
+    when io.wEn :
       write mport _T_18 = mem[io.wAddr], clock
       _T_18 <= io.dI
-      skip 
+      skip
 """.stripMargin
     val mems = Set(MemConf("mem_ext", 7, 16, Map(WritePort -> 1, ReadPort -> 1), None))
     val confLoc = "ReplSeqMemTests.confTEMP"
@@ -495,8 +495,9 @@ circuit CustomMemory :
     val annos = Seq(ReplSeqMemAnnotation.parse("-c:CustomMemory:-o:" + confLoc))
     val res = compileAndEmit(CircuitState(parse(input), ChirrtlForm, annos))
     // TODO Until RemoveCHIRRTL is removed, enable will still drive validif for mask
-    res should containLine("mem.W0_mask_0 <= validif(io_en, io_mask_0)")
-    res should containLine("mem.W0_mask_1 <= validif(io_en, io_mask_1)")
+    res should containLine ("node _GEN_7 = validif(io_en, io_mask_0)")
+    res should containLine ("node _GEN_8 = validif(io_en, io_mask_1)")
+    res should containLine ("mem.W0_mask <= cat(_GEN_8, _GEN_7)")
     // Check the emitted conf
     checkMemConf(res, mems)
     (new java.io.File(confLoc)).delete()
@@ -531,8 +532,9 @@ circuit CustomMemory :
     val annos = Seq(ReplSeqMemAnnotation.parse("-c:CustomMemory:-o:" + confLoc), InferReadWriteAnnotation)
     val res = compileAndEmit(CircuitState(parse(input), ChirrtlForm, annos))
     // TODO Until RemoveCHIRRTL is removed, enable will still drive validif for mask
-    res should containLine("mem.RW0_wmask_0 <= validif(io_en, io_mask_0)")
-    res should containLine("mem.RW0_wmask_1 <= validif(io_en, io_mask_1)")
+    res should containLine ("node _GEN_7 = validif(io_en, io_mask_0)")
+    res should containLine ("node _GEN_8 = validif(io_en, io_mask_1)")
+    res should containLine ("mem.RW0_wmask <= cat(_GEN_8, _GEN_7)")
     // Check the emitted conf
     checkMemConf(res, mems)
     (new java.io.File(confLoc)).delete()
@@ -565,8 +567,8 @@ circuit NoMemsHere :
 
   "ReplSeqMem" should "throw an exception when encountering masks with variable granularity" in {
     val input = """
-circuit Top : 
-  module Top : 
+circuit Top :
+  module Top :
     input clock : Clock
     input wmask : {a : UInt<1>, b : UInt<1>}
     input waddr : UInt<5>
@@ -580,7 +582,7 @@ circuit Top :
         w.a <- wdata.a
     when wmask.b :
         w.b <- wdata.b
-      
+
     read mport r = testmem[raddr], clock
     rdata <- r
 """.stripMargin

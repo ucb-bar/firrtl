@@ -39,6 +39,7 @@ import scala.collection.mutable
   */
 object LowerTypes extends Transform with DependencyAPIMigration {
   override def prerequisites: Seq[TransformDependency] = Seq(
+    Dependency[firrtl.transforms.CollapseVectors], // vectors of bools are collapsed to UInts
     Dependency(RemoveAccesses), // we require all SubAccess nodes to have been removed
     Dependency(CheckTypes), // we require all types to be correct
     Dependency(InferTypes), // we require instance types to be resolved (i.e., DefInstance.tpe != UnknownType)
