@@ -4,7 +4,7 @@ package firrtl.stage.transforms
 
 import firrtl.options.DependencyManagerUtils.CharSet
 import firrtl.stage.TransformManager
-import firrtl.{Transform, VerilogEmitter}
+import firrtl.{SeqTransform, Transform}
 
 /** A [[firrtl.stage.TransformManager TransformManager]] of
   */
@@ -30,20 +30,24 @@ class Compiler(
     val last = size - 1
 
     val f: PartialFunction[(Transform, Int), Seq[String]] = {
-      {
-        case (a: VerilogEmitter, `last`) =>
-          val firstTransforms = a.transforms.dropRight(1)
-          val lastTransform = a.transforms.last
-          Seq(s"$tab$l ${a.name}") ++
-            firstTransforms.map(t => s"""$tab${" " * c.size} $n ${t.name}""") :+
-            s"""$tab${" " * c.size} $l ${lastTransform.name}"""
-        case (a: VerilogEmitter, _) =>
-          val firstTransforms = a.transforms.dropRight(1)
-          val lastTransform = a.transforms.last
-          Seq(s"$tab$n ${a.name}") ++
-            firstTransforms.map(t => s"""$tab$c $n ${t.name}""") :+
-            s"""$tab$c $l ${lastTransform.name}"""
-      }
+      case (a: SeqTransform, `last`) =>
+        val firstTransforms = a.transforms.dropRight(1)
+        val lastTransform = a.transforms.last
+        Seq(s"$tab$l ${a.name}") ++
+          firstTransforms.map(t => s"""$tab${" " * c.size} $n ${t.name}""") :+
+          s"""$tab${" " * c.size} $l ${lastTransform.name}"""
+      case (a: SeqTransform, _) =>
+        val firstTransforms = a.transforms.dropRight(1)
+        val lastTransform = a.transforms.last
+        Seq(s"$tab$n ${a.name}") ++
+          firstTransforms.map(t => s"""$tab$c $n ${t.name}""") :+
+          s"""$tab$c $l ${lastTransform.name}"""
+      case (a: TransformBatch, _) =>
+        val firstTransforms = a.transformManager.flattenedTransformOrder.dropRight(1)
+        val lastTransform = a.transformManager.flattenedTransformOrder.last
+        Seq(s"$tab$n ${a.name}") ++
+          firstTransforms.map(t => s"""$tab$c $n ${t.name}""") :+
+          s"""$tab$c $l ${lastTransform.name}"""
     }
 
     Some(f)

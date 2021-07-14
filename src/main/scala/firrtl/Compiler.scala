@@ -305,6 +305,9 @@ trait Transform extends TransformLike[CircuitState] with DependencyAPI[Transform
     case U => Nil
   }
 
+  /** get prerequisites recursively. */
+  def recursivePrerequisites: Seq[Dependency[Transform]] = prerequisites.flatMap(_.getObject().prerequisites.flatMap(_.getObject().recursivePrerequisites)) ++ prerequisites
+
   override def optionalPrerequisites: Seq[Dependency[Transform]] = inputForm match {
     case L => Forms.LowFormOptimized ++ Forms.AssertsRemoved
     case _ => Seq.empty
@@ -375,6 +378,7 @@ trait SeqTransformBased {
 }
 
 /** For transformations that are simply a sequence of transforms */
+@deprecated("use TransformBatch will be deprecated in 1.3", "1.2")
 abstract class SeqTransform extends Transform with SeqTransformBased {
   def execute(state: CircuitState): CircuitState = {
     /*
