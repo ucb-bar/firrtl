@@ -110,7 +110,7 @@ class firrtlCrossModule(val crossScalaVersion: String) extends CrossSbtModule wi
   }
 
   /* protoc */
-  def protocVersion = "3.15.6"
+  def protocVersion = "3.15.8"
 
   def protobufSource = T.source {
     millSourcePath / "src" / "main" / "proto" / "firrtl.proto"
