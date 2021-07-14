@@ -128,7 +128,7 @@ class EliminateTargetPaths extends Transform with DependencyAPIMigration {
     * @param targets
     * @return
     */
-  def run(cir: Circuit, targets: Seq[IsMember], iGraph: InstanceKeyGraph): (Circuit, RenameMap, AnnotationSeq) = {
+  def run(cir: Circuit, targets: Seq[IsModule], iGraph: InstanceKeyGraph): (Circuit, RenameMap, AnnotationSeq) = {
 
     val dupMap = DuplicationHelper(cir.modules.map(_.name).toSet)
 
@@ -156,54 +156,81 @@ class EliminateTargetPaths extends Transform with DependencyAPIMigration {
     }
 
     val finalModuleList = duplicatedModuleList
-    lazy val finalModuleSet = finalModuleList.map { case a: DefModule => a.name }.toSet
 
     // Records how targets have been renamed
     val renameMap = RenameMap()
 
-    /* Foreach target, calculate the pathless version and only rename targets that are instantiated. Additionally, rename
-     * module targets
+    /* Rename the old module and all of its sub-paths to newPathless
      */
-    def addRecord(old: IsMember, newPathless: IsMember): Unit = old match {
+    def addRecord(old: IsModule, newPathless: IsMember): Unit = old match {
       case x: ModuleTarget =>
         renameMap.record(x, newPathless)
-      case x: IsComponent if x.path.isEmpty =>
-        renameMap.record(x, newPathless)
-      case x: IsComponent =>
+      case x: InstanceTarget =>
         renameMap.record(x, newPathless)
         addRecord(x.stripHierarchy(1), newPathless)
     }
-    val duplicatedParents = mutable.Set[OfModule]()
-    targets.foreach { t =>
-      val newTs = dupMap.makePathless(t)
-      val path = t.asPath
-      if (path.nonEmpty) { duplicatedParents += path(0)._2 }
-      newTs.toList match {
-        case Seq(pathless) =>
-          val mt = Target.referringModule(pathless)
-          addRecord(t, pathless)
-          renameMap.record(Target.referringModule(t), mt)
-        case _ =>
-      }
-    }
 
-    def addSelfRecord(mod: IsModule): Unit = mod match {
-      case m: ModuleTarget =>
-      case i: InstanceTarget if renameMap.underlying.contains(i) =>
-      case i: InstanceTarget =>
-        renameMap.record(i, i)
-        addSelfRecord(i.stripHierarchy(1))
-    }
+    val seenTargets = mutable.Set[IsModule]()
     val topMod = ModuleTarget(cir.main, cir.main)
-    duplicatedParents.foreach { parent =>
-      val paths = iGraph.findInstancesInHierarchy(parent.value)
-      val newTargets = paths.map { path =>
+
+    /** Record renames for all paths to duplicated modules, including relative paths
+      */
+    targets.foreach { t =>
+      // get all paths to the instances of this target's top module
+      val parentTargets = iGraph.findInstancesInHierarchy(t.module).map { path =>
         path.tail.foldLeft(topMod: IsModule) {
           case (mod, wDefInst) =>
             mod.instOf(wDefInst.name, wDefInst.module)
         }
       }
-      newTargets.foreach(addSelfRecord(_))
+
+      var currT = t
+      while (!currT.isInstanceOf[ModuleTarget] && !seenTargets(currT)) {
+        seenTargets += currT
+        val newTs = dupMap.makePathless(currT)
+        newTs.toList match {
+          case Seq(pathless) =>
+            val mt = Target.referringModule(pathless)
+
+            /** prepend current target with parent targets to make sure that all
+              * possible relative paths to duplicated module are recorded
+              */
+            parentTargets.foreach { p =>
+              val path = p.asPath ++ currT.asPath
+              val (Instance(inst), OfModule(ofMod)) = path.last
+              val withParent = InstanceTarget(p.circuit, p.module, path.dropRight(1), inst, ofMod)
+              seenTargets += withParent
+              addRecord(withParent, pathless)
+            }
+          case _ =>
+        }
+        currT = currT.asInstanceOf[InstanceTarget].targetParent
+      }
+    }
+
+    /** Add self renames leading for each path leading to each duplicated
+      * module if that path was not renamed yet
+      */
+    targets.flatMap(_.asPath.map(_._2)).distinct.foreach { ofModule =>
+      val paths = iGraph.findInstancesInHierarchy(ofModule.value)
+      val pathTargets = paths.map { path =>
+        path.tail.foldLeft(topMod: IsModule) {
+          case (mod, wDefInst) =>
+            mod.instOf(wDefInst.name, wDefInst.module)
+        }
+      }
+      pathTargets.foreach { t =>
+        var currT = t
+
+        /** If the current target was not renamed yet, then it is not affected
+          * by duplication and should be renamed to itself
+          */
+        while (!currT.isInstanceOf[ModuleTarget] && !seenTargets(currT)) {
+          seenTargets += currT
+          renameMap.record(currT, currT)
+          currT = currT.asInstanceOf[InstanceTarget].stripHierarchy(1)
+        }
+      }
     }
 
     // Return modified circuit and associated renameMap
@@ -215,11 +242,15 @@ class EliminateTargetPaths extends Transform with DependencyAPIMigration {
 
     val (remainingAnnotations, targetsToEliminate, previouslyDeduped) =
       state.annotations.foldLeft(
-        (Vector.empty[Annotation], Seq.empty[CompleteTarget], Map.empty[IsModule, (ModuleTarget, Double)])
+        (Vector.empty[Annotation], Seq.empty[IsModule], Map.empty[IsModule, (ModuleTarget, Double)])
       ) {
         case ((remainingAnnos, targets, dedupedResult), anno) =>
           anno match {
-            case ResolvePaths(ts) =>
+            case ResolvePaths(tss) =>
+              val ts = tss.map {
+                case m: IsModule    => m
+                case c: IsComponent => c.pathTarget
+              }
               (remainingAnnos, ts ++ targets, dedupedResult)
             case DedupedResult(orig, dups, idx) if dups.nonEmpty =>
               (remainingAnnos, targets, dedupedResult ++ dups.map(_ -> (orig, idx)).toMap)
@@ -265,8 +296,8 @@ class EliminateTargetPaths extends Transform with DependencyAPIMigration {
       mod => cache.getOrElseUpdate(mod, iGraph.findInstancesInHierarchy(mod).size == 1)
     }
     val firstRenameMap = RenameMap()
-    val nonSingletonTargets = targets.foldRight(Seq.empty[IsMember]) {
-      case (t: IsComponent, acc) if t.asPath.nonEmpty =>
+    val nonSingletonTargets = targets.foldRight(Seq.empty[IsModule]) {
+      case (t: IsModule, acc) if t.asPath.nonEmpty =>
         val origPath = t.asPath
         val (singletonPrefix, rest) = origPath.partition {
           case (_, OfModule(mod)) =>
@@ -285,8 +316,7 @@ class EliminateTargetPaths extends Transform with DependencyAPIMigration {
               InstanceTarget(circuit, module, path, inst, ofMod)
             }
           val newTarget = t match {
-            case r: ReferenceTarget => r.setPathTarget(newIsModule)
-            case i: InstanceTarget  => newIsModule
+            case i: InstanceTarget => newIsModule
           }
           firstRenameMap.record(t, Seq(newTarget))
           newTarget +: acc

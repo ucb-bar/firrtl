@@ -10,19 +10,24 @@ import firrtl.transforms.{DedupedResult, DontTouchAnnotation}
 import firrtl.testutils.{FirrtlMatchers, FirrtlPropSpec}
 
 object EliminateTargetPathsSpec {
-
-  case class DummyAnnotation(target: Target) extends SingleTargetAnnotation[Target] {
-    override def duplicate(n: Target): Annotation = DummyAnnotation(n)
+  case class DummyAnno(targets: Seq[Named]) extends Annotation {
+    def update(renames: RenameMap) = {
+      Seq(this.copy(targets.flatMap(renames.get(_).getOrElse(targets))))
+    }
   }
+
+  object DummyAnno {
+    def apply(target: Named): DummyAnno = DummyAnno(Seq(target))
+  }
+
   class DummyTransform() extends Transform with ResolvedAnnotationPaths {
     override def inputForm:  CircuitForm = LowForm
     override def outputForm: CircuitForm = LowForm
 
-    override val annotationClasses: Traversable[Class[_]] = Seq(classOf[DummyAnnotation])
+    override val annotationClasses: Traversable[Class[_]] = Seq(classOf[DummyAnno])
 
     override def execute(state: CircuitState): CircuitState = state
   }
-
 }
 
 class EliminateTargetPathsSpec extends FirrtlPropSpec with FirrtlMatchers {
@@ -184,7 +189,7 @@ class EliminateTargetPathsSpec extends FirrtlPropSpec with FirrtlMatchers {
         |  module Middle___Top_m1 :
         |  module Middle____Top_m1 :""".stripMargin.split("\n")
     val Top_m1 = Top.instOf("m1", "Middle")
-    val inputState = CircuitState(parse(input), ChirrtlForm, Seq(DummyAnnotation(Top_m1)))
+    val inputState = CircuitState(parse(input), ChirrtlForm, Seq(DummyAnno(Top_m1)))
     val outputState = new LowFirrtlCompiler().compile(inputState, customTransforms)
     val outputLines = outputState.circuit.serialize.split("\n")
     checks.foreach { line =>
@@ -223,7 +228,7 @@ class EliminateTargetPathsSpec extends FirrtlPropSpec with FirrtlMatchers {
 
     val Top_m1 = Top.instOf("m1", "Middle")
     val Top_m2 = Top.instOf("m2", "Middle")
-    val inputState = CircuitState(parse(input), ChirrtlForm, Seq(DummyAnnotation(Top_m1), DummyAnnotation(Top_m2)))
+    val inputState = CircuitState(parse(input), ChirrtlForm, Seq(DummyAnno(Top_m1), DummyAnno(Top_m2)))
     val outputState = new LowFirrtlCompiler().compile(inputState, customTransforms)
     val outputLines = outputState.circuit.serialize.split("\n")
 
@@ -258,14 +263,14 @@ class EliminateTargetPathsSpec extends FirrtlPropSpec with FirrtlMatchers {
       """.stripMargin
     val e1 = the[CustomTransformException] thrownBy {
       val Top_m1 = Top.instOf("m1", "MiddleX")
-      val inputState = CircuitState(parse(input), ChirrtlForm, Seq(DummyAnnotation(Top_m1)))
+      val inputState = CircuitState(parse(input), ChirrtlForm, Seq(DummyAnno(Top_m1)))
       new LowFirrtlCompiler().compile(inputState, customTransforms)
     }
     e1.cause shouldBe a[NoSuchTargetException]
 
     val e2 = the[CustomTransformException] thrownBy {
       val Top_m2 = Top.instOf("x2", "Middle")
-      val inputState = CircuitState(parse(input), ChirrtlForm, Seq(DummyAnnotation(Top_m2)))
+      val inputState = CircuitState(parse(input), ChirrtlForm, Seq(DummyAnno(Top_m2)))
       new LowFirrtlCompiler().compile(inputState, customTransforms)
     }
     e2.cause shouldBe a[NoSuchTargetException]
@@ -310,7 +315,7 @@ class EliminateTargetPathsSpec extends FirrtlPropSpec with FirrtlMatchers {
     val Middle_l1 = CircuitTarget("Top").module("Middle").instOf("_l", "Leaf")
     val Middle_l2 = CircuitTarget("Top").module("Middle_").instOf("l", "Leaf")
     val inputState =
-      CircuitState(parse(input), ChirrtlForm, Seq(DummyAnnotation(Middle_l1), DummyAnnotation(Middle_l2)))
+      CircuitState(parse(input), ChirrtlForm, Seq(DummyAnno(Middle_l1), DummyAnno(Middle_l2)))
     val outputState = new LowFirrtlCompiler().compile(inputState, customTransforms)
     val outputLines = outputState.circuit.serialize.split("\n")
     checks.foreach { line =>
@@ -421,7 +426,7 @@ class EliminateTargetPathsSpec extends FirrtlPropSpec with FirrtlMatchers {
       CircuitTarget("Foo").module("Foo").instOf("bar", "Bar"),
       CircuitTarget("Foo").module("Foo")
     )
-    val dontTouches = targets.map(t => DontTouchAnnotation(t.ref("foo")))
+    val dontTouches = targets.map(t => DummyAnno(t.ref("foo")))
     val inputCircuit = Parser.parse(input)
     val output = CircuitState(passes.ToWorkingIR.run(inputCircuit), UnknownForm, dontTouches)
       .resolvePaths(targets)
@@ -430,11 +435,11 @@ class EliminateTargetPathsSpec extends FirrtlPropSpec with FirrtlMatchers {
 
     output.circuit.serialize should be(inputCircuit.serialize)
     (output.annotations.collect {
-      case a: DontTouchAnnotation => a
+      case a: DummyAnno => a
     } should contain).allOf(
-      DontTouchAnnotation(ModuleTarget("Foo", "Foo").ref("foo")),
-      DontTouchAnnotation(ModuleTarget("Foo", "Bar").ref("foo")),
-      DontTouchAnnotation(ModuleTarget("Foo", "Baz").ref("foo"))
+      DummyAnno(Seq(ModuleTarget("Foo", "Foo").ref("foo"))),
+      DummyAnno(Seq(ModuleTarget("Foo", "Bar").ref("foo"))),
+      DummyAnno(Seq(ModuleTarget("Foo", "Baz").ref("foo")))
     )
   }
 
@@ -461,7 +466,7 @@ class EliminateTargetPathsSpec extends FirrtlPropSpec with FirrtlMatchers {
       CircuitTarget("FooBar").module("FooBar").instOf("foo", "Foo").instOf("bar", "Bar"),
       CircuitTarget("FooBar").module("FooBar").instOf("foo", "Foo").instOf("barBar", "Bar")
     )
-    val dontTouches = targets.map(t => DontTouchAnnotation(t.ref("baz")))
+    val dontTouches = targets.map(t => DummyAnno(t.ref("baz")))
     val output = CircuitState(passes.ToWorkingIR.run(Parser.parse(input)), UnknownForm, dontTouches)
       .resolvePaths(targets)
 
@@ -473,10 +478,10 @@ class EliminateTargetPathsSpec extends FirrtlPropSpec with FirrtlMatchers {
     }
 
     (output.annotations.collect {
-      case a: DontTouchAnnotation => a
+      case a: DummyAnno => a
     } should contain).allOf(
-      DontTouchAnnotation(ModuleTarget("FooBar", "Bar___Foo_bar").ref("baz")),
-      DontTouchAnnotation(ModuleTarget("FooBar", "Bar___Foo_barBar").ref("baz"))
+      DummyAnno(Seq(ModuleTarget("FooBar", "Bar___Foo_bar").ref("baz"))),
+      DummyAnno(Seq(ModuleTarget("FooBar", "Bar___Foo_barBar").ref("baz")))
     )
   }
 
@@ -541,9 +546,9 @@ class EliminateTargetPathsSpec extends FirrtlPropSpec with FirrtlMatchers {
     val lkj = ModuleTarget("Top", "Top").instOf("bar", "Bar").instOf("lkj", "Baz")
     val baz = ModuleTarget("Top", "Top").instOf("baz", "Baz")
     val annos = Seq(
-      DontTouchAnnotation(asdf.ref("foo")),
-      DontTouchAnnotation(lkj.ref("foo")),
-      DontTouchAnnotation(baz.ref("foo"))
+      DummyAnno(asdf.ref("foo")),
+      DummyAnno(lkj.ref("foo")),
+      DummyAnno(baz.ref("foo"))
     )
     val inputCircuit = Parser.parse(input)
     val output = CircuitState(passes.ToWorkingIR.run(inputCircuit), UnknownForm, annos)
@@ -551,11 +556,11 @@ class EliminateTargetPathsSpec extends FirrtlPropSpec with FirrtlMatchers {
 
     info(output.circuit.serialize)
 
-    output.annotations.collect { case a: DontTouchAnnotation => a } should be(
+    output.annotations.collect { case a: DummyAnno => a } should be(
       Seq(
-        DontTouchAnnotation(ModuleTarget("Top", "Baz___Bar_asdf").ref("foo")),
-        DontTouchAnnotation(ModuleTarget("Top", "Baz___Bar_lkj").ref("foo")),
-        DontTouchAnnotation(baz.ref("foo"))
+        DummyAnno(Seq(ModuleTarget("Top", "Baz___Bar_asdf").ref("foo"))),
+        DummyAnno(Seq(ModuleTarget("Top", "Baz___Bar_lkj").ref("foo"))),
+        DummyAnno(Seq(baz.ref("foo")))
       )
     )
   }
@@ -580,16 +585,111 @@ class EliminateTargetPathsSpec extends FirrtlPropSpec with FirrtlMatchers {
       ModuleTarget("Top", "System").instOf(s"core_$i", "Core")
     }
     val coreModule = ModuleTarget("Top", "Core")
-    val annos = (coreModule +: (relCoreInstances ++ absCoreInstances)).map(DummyAnnotation(_))
+    val annos = (coreModule +: (relCoreInstances ++ absCoreInstances)).map(DummyAnno(_))
     val inputCircuit = Parser.parse(input)
     val output = CircuitState(passes.ToWorkingIR.run(inputCircuit), UnknownForm, annos)
       .resolvePaths(relCoreInstances ++ absCoreInstances)
 
     info(output.circuit.serialize)
 
-    val checkDontTouches = (1 to 4).map { i =>
-      DummyAnnotation(ModuleTarget("Top", s"Core___System_core_$i"))
+    val checkDontTouches =
+      DummyAnno((1 to 4).map { i => ModuleTarget("Top", s"Core___System_core_$i") }) +:
+        (1 to 4).map { i =>
+          DummyAnno(ModuleTarget("Top", s"Core___System_core_$i"))
+        }
+    output.annotations.collect { case a: DummyAnno => a } should be(checkDontTouches)
+  }
+
+  property("It should properly rename unaffected modules") {
+    val input =
+      """|circuit Top:
+         |  module Core:
+         |    node clock = UInt<1>(0)
+         |  module System:
+         |    inst core_1 of Core
+         |    inst core_2 of Core
+         |    inst core_3 of Core
+         |    inst core_4 of Core
+         |  module Top:
+         |    inst system1 of System
+         |    inst system2 of System
+         |""".stripMargin
+    val absCoreInstances = Seq(
+      ModuleTarget("Top", "Top").instOf("system1", "System").instOf(s"core_1", "Core"),
+      ModuleTarget("Top", "Top").instOf("system2", "System").instOf(s"core_1", "Core")
+    )
+
+    // only paths touching Core_1 should be renamed
+    val relCoreInstances = (1 to 4).map { i =>
+      ModuleTarget("Top", "System").instOf(s"core_$i", "Core")
     }
-    output.annotations.collect { case a: DummyAnnotation => a } should be(checkDontTouches)
+
+    val annos = (relCoreInstances ++ absCoreInstances).map(DummyAnno(_))
+    val inputCircuit = Parser.parse(input)
+    val output = CircuitState(passes.ToWorkingIR.run(inputCircuit), UnknownForm, annos)
+      .resolvePaths(absCoreInstances)
+
+    info(output.circuit.serialize)
+
+    val checkDontTouches =
+      DummyAnno(
+        Seq(
+          ModuleTarget("Top", s"Core___Top_system1_core_1"),
+          ModuleTarget("Top", s"Core___Top_system2_core_1")
+        )
+      ) +:
+        (2 to 4).map { i =>
+          DummyAnno(ModuleTarget("Top", "System").instOf(s"core_$i", "Core"))
+        } ++:
+        Seq(
+          DummyAnno(ModuleTarget("Top", s"Core___Top_system1_core_1")),
+          DummyAnno(ModuleTarget("Top", s"Core___Top_system2_core_1"))
+        )
+    val outputs = output.annotations.collect { case a: DummyAnno => a }
+    outputs should be(checkDontTouches)
+  }
+
+  property("It should not try to rename children of duplicated modules") {
+    val input =
+      """|circuit Top:
+         |  module Core:
+         |    node clock = UInt<1>(0)
+         |  module System:
+         |    inst core_1 of Core
+         |  module Top:
+         |    inst top of TopTop
+         |  module TopTop:
+         |    inst system1 of System
+         |    inst system2 of System
+         |    inst system3 of System
+         |""".stripMargin
+    val absCoreInstances = Seq(
+      ModuleTarget("Top", "Top").instOf("top", "TopTop").instOf("system1", "System").instOf(s"core_1", "Core"),
+      ModuleTarget("Top", "Top").instOf("top", "TopTop").instOf("system2", "System").instOf(s"core_1", "Core"),
+      ModuleTarget("Top", "Top").instOf("top", "TopTop").instOf("system3", "System").instOf(s"core_1", "Core")
+    )
+
+    val systems = Seq(
+      ModuleTarget("Top", "TopTop").instOf("system1", "System").instOf("core_1", "Core"),
+      ModuleTarget("Top", "TopTop").instOf("system2", "System").instOf("core_1", "Core")
+    )
+
+    val annos = (absCoreInstances).map(DummyAnno(_))
+    val inputCircuit = Parser.parse(input)
+    val output = CircuitState(passes.ToWorkingIR.run(inputCircuit), UnknownForm, annos)
+      .resolvePaths(systems)
+
+    info(output.circuit.serialize)
+
+    val checkDontTouches =
+      Seq(
+        DummyAnno(ModuleTarget("Top", "Core___TopTop_system1_core_1")),
+        DummyAnno(ModuleTarget("Top", "Core___TopTop_system2_core_1")),
+        DummyAnno(
+          ModuleTarget("Top", "Top").instOf("top", "TopTop").instOf("system3", "System").instOf(s"core_1", "Core")
+        )
+      )
+    val outputs = output.annotations.collect { case a: DummyAnno => a }
+    outputs should be(checkDontTouches)
   }
 }
