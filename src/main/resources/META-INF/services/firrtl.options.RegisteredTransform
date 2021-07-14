@@ -1,4 +1,5 @@
 firrtl.transforms.DeadCodeElimination
+firrtl.transforms.PartitionCircuit
 firrtl.transforms.CheckCombLoops
 firrtl.passes.InlineInstances
 firrtl.passes.clocklist.ClockListTransform
