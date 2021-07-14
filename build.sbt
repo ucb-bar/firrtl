@@ -31,7 +31,7 @@ lazy val firrtlSettings = Seq(
     "org.scala-lang" % "scala-reflect" % scalaVersion.value,
     "org.scalatest" %% "scalatest" % "3.2.9" % "test",
     "org.scalatestplus" %% "scalacheck-1-14" % "3.1.3.0" % "test",
-    "com.github.scopt" %% "scopt" % "3.7.1",
+    "com.github.scopt" %% "scopt" % "4.0.0",
     "net.jcazevedo" %% "moultingyaml" % "0.4.2",
     "org.json4s" %% "json4s-native" % "3.6.11",
     "org.apache.commons" % "commons-text" % "1.8",
@@ -197,7 +197,7 @@ lazy val jqf = (project in file("jqf"))
     libraryDependencies ++= Seq(
       "edu.berkeley.cs.jqf" % "jqf-fuzz" % JQF_VERSION,
       "edu.berkeley.cs.jqf" % "jqf-instrument" % JQF_VERSION,
-      "com.github.scopt" %% "scopt" % "3.7.1",
+      "com.github.scopt" %% "scopt" % "4.0.0",
     )
   )
 
