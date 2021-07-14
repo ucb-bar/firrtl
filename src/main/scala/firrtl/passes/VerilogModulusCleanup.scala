@@ -5,7 +5,7 @@ package passes
 
 import firrtl.ir._
 import firrtl.Mappers._
-import firrtl.PrimOps.{Bits, Rem}
+import firrtl.PrimOps.{AsSInt, Bits, Rem}
 import firrtl.Utils._
 import firrtl.options.Dependency
 
@@ -20,6 +20,7 @@ import scala.collection.mutable
   *   1) adds a temporary node equal to (a % b) with width Max(W(a), W(b))
   *   2) replaces the reference to (a % b) with a bitslice of the temporary node
   *      to get back down to width Min(W(a), W(b))
+  *   3) optionally casts back to an SInt if the original % was an SInt
   *
   *  This is technically incorrect firrtl, but allows the verilog emitter
   *  to emit correct verilog without needing to add temporary nodes
@@ -74,7 +75,16 @@ object VerilogModulusCleanup extends Pass {
               v += DefNode(get_info(s), name, e.mapType(verilogRemWidth(e)))
               val remRef = WRef(name, newType.tpe, kind(e), flow(e))
               val remWidth = bitWidth(e.tpe)
-              DoPrim(Bits, Seq(remRef), Seq(remWidth - 1, BigInt(0)), e.tpe)
+              val bits = DoPrim(Bits, Seq(remRef), Seq(remWidth - 1, BigInt(0)), UIntType(IntWidth(remWidth)))
+              e.tpe match {
+                // If the remainder op was on UInts, then just return the bit slice
+                case _: UIntType => bits
+                // If the reminader op was on SInts, then cast back to an SInt because bits returns a UInt
+                case _: SIntType =>
+                  val namex = namespace.newTemp
+                  v += DefNode(get_info(s), namex, bits)
+                  DoPrim(AsSInt, Seq(WRef(namex, e.tpe, kind(e), flow(e))), Seq.empty, e.tpe)
+              }
             case _ => e
           }
         case _ => e

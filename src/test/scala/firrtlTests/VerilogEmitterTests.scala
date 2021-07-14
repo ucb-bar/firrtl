@@ -480,12 +480,12 @@ class VerilogEmitterSpec extends FirrtlFlatSpec {
         EmitCircuitAnnotation(classOf[VerilogEmitter])
       )
     )
-    CircuitState(
-      annotations.collectFirst {
-        case FirrtlCircuitAnnotation(circuit) => circuit
-      }.get,
-      annotations
-    ) should containLines(check: _*)
+
+    val output = annotations.collectFirst {
+      case FirrtlCircuitAnnotation(circuit) => circuit.serialize
+    }.get
+
+    check.foreach(output contains _)
   }
 
   behavior.of("Register Updates")

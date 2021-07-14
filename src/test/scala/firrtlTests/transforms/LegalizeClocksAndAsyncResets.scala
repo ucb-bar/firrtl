@@ -18,9 +18,9 @@ class LegalizeClocksTransformSpec extends FirrtlFlatSpec {
         |  module test :
         |    stop(asClock(UInt(1)), UInt(1), 1)
         |""".stripMargin
-    val result = compile(input)
-    result should containLine(s"always @(posedge _GEN_0) begin")
-    result.getEmittedCircuit.value shouldNot include("always @(posedge 1")
+    val result = compile(input).getEmittedCircuit.value
+    result should include(s"always @(posedge _GEN_")
+    result shouldNot include("always @(posedge 1")
   }
 
   it should "not emit @(posedge 1'h0) for printf" in {
@@ -29,9 +29,9 @@ class LegalizeClocksTransformSpec extends FirrtlFlatSpec {
         |  module test :
         |    printf(asClock(UInt(1)), UInt(1), "hi")
         |""".stripMargin
-    val result = compile(input)
-    result should containLine(s"always @(posedge _GEN_0) begin")
-    result.getEmittedCircuit.value shouldNot include("always @(posedge 1")
+    val result = compile(input).getEmittedCircuit.value
+    result should include(s"always @(posedge _GEN_")
+    result shouldNot include("always @(posedge 1")
   }
 
   it should "not emit @(posedge 1'h0) for reg" in {
@@ -44,9 +44,9 @@ class LegalizeClocksTransformSpec extends FirrtlFlatSpec {
         |    r <= in
         |    out <= r
         |""".stripMargin
-    val result = compile(input)
-    result should containLine(s"always @(posedge _GEN_0) begin")
-    result.getEmittedCircuit.value shouldNot include("always @(posedge 1")
+    val result = compile(input).getEmittedCircuit.value
+    result should include(s"always @(posedge _GEN_")
+    result shouldNot include("always @(posedge 1")
   }
 
   it should "not emit @(posedge 1'h0) for mem" in {
