@@ -33,9 +33,10 @@ trait DontTouchAllTargets extends HasDontTouches { self: Annotation =>
   }
 }
 
-/** A component that should be preserved
+/** Mark that a target is an optimization barrier to the FIRRTL compiler.  This has the effect of guaranteeing that the
+  * target will not be removed from the circuit by an optimization pass.
   *
-  * DCE treats the component as a top-level sink of the circuit
+  * @note DCE treats the component as a top-level sink of the circuit.
   */
 case class DontTouchAnnotation(target: ReferenceTarget)
     extends SingleTargetAnnotation[ReferenceTarget]
