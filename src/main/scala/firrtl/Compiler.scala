@@ -411,9 +411,6 @@ trait ResolvedAnnotationPaths {
   override def prepare(state: CircuitState): CircuitState = {
     state.resolvePathsOf(annotationClasses.toSeq: _*)
   }
-
-  // Any transform with this trait invalidates DedupAnnotationsTransform
-  override def invalidates(a: Transform) = a.isInstanceOf[DedupAnnotationsTransform]
 }
 
 /** Defines old API for Emission. Deprecated */
